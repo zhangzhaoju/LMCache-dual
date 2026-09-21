@@ -1,0 +1,26 @@
+.ruff_cache
+_version.py
+build
+*.so
+*.pyc
+.pytest_cache
+.env
+_build_info.py
+*.pt
+
+# Ascend Specific
+fusion_result.json
+kernel_meta
+
+output
+schedule.log
+
+# PyCharm
+.idea/
+
+# Visual Studio Code
+.vscode/
+
+# claude
+CLAUDE.md
+.claude/

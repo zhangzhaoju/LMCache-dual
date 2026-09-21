@@ -1,0 +1,32 @@
+# P1 candidate: reuse the approved intranet environment; no implicit upgrades.
+# Transitional non-device dependencies remain until the P4 import-closure trim.
+# OpenCV stays on the Ascend baseline while shared media imports still exist.
+aiofile
+aiofiles
+blake3
+aiohttp
+awscrt
+fastapi
+httpx
+msgspec
+numba
+opentelemetry-api >= 1.20.0
+opentelemetry-sdk >= 1.20.0
+opentelemetry-exporter-otlp >= 1.20.0
+opentelemetry-exporter-prometheus >= 0.50b0
+prometheus_client >= 0.18.0
+psutil
+py-cpuinfo
+pyyaml
+pyzmq >= 25.0.0
+redis
+safetensors
+setuptools>=77.0.3,<81.0.0
+setuptools_scm>=8
+sortedcontainers
+transformers >= 4.51.1
+uvicorn
+httptools
+numpy==1.26.4
+torch==2.9.0
+torch-npu==2.9.0.post1+gitee7ba04

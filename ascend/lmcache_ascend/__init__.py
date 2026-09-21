@@ -1,0 +1,723 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# The version.py should be independent library, and we always import the
+# version library first.  Such assumption is critical for some customization.
+from ._version import __version__ as __version__  # noqa: F401  # isort:skip
+from ._version import __version_tuple__ as __version_tuple__  # noqa: F401  # isort:skip
+
+# Standard
+import sys
+from typing import Optional
+
+# First Party
+from lmcache_ascend import _build_info
+
+# NOTE: Must be manually edited per each version and
+# is also used by the test infrastructure.
+LMCACHE_UPSTREAM_TAG = "v0.4.3"
+LMCACHE_ASCEND_PATCHED = False
+
+
+def _is_sglang_runtime():
+    return "sglang" in sys.modules or any("sglang" in arg for arg in sys.argv)
+
+
+def _is_vllm_runtime():
+    return "vllm" in sys.modules or any("vllm" in arg for arg in sys.argv)
+
+
+def _patch_config():
+    # Third Party
+    from lmcache.v1.config_base import _to_bool, _to_int_list, create_config_class
+    import lmcache.v1.config
+
+    upstream_validate_config = lmcache.v1.config._validate_config
+
+    def _validate_ascend_config(config):
+        """Apply RemoteFill's fixed Ascend contract before validation."""
+
+        remote_fill_active = bool(
+            getattr(config, "enable_remote_lmcache_store", False)
+        )
+        if remote_fill_active:
+            # None of these are independent feature choices. RemoteFill uses
+            # the existing direct-NPU, page-first, rank0-owned DSA path and
+            # finalizes persistent stores asynchronously on the prefiller.
+            config.use_layerwise = True
+            config.enable_sparse_attention = True
+            config.dsa_two_groups = True
+            config.save_unfull_chunk = True
+            extra_config = dict(config.extra_config or {})
+            if (
+                getattr(config, "dsa_group1_load_mode", "")
+                == "persistent_direct_hbm"
+                and bool(extra_config.get("save_chunk_meta", False))
+            ):
+                raise ValueError(
+                    "dsa_group1_load_mode=persistent_direct_hbm requires "
+                    "extra_config.save_chunk_meta=false"
+                )
+            extra_config.update(
+                {
+                    "save_only_first_rank": True,
+                    "mooncake_page_first_multi_buffer": True,
+                    "mooncake_layer_merged_page_objects": True,
+                    "save_chunk_meta": False,
+                }
+            )
+            if getattr(config, "pd_role", None) == "receiver":
+                config.enable_shared_cpu_cache = True
+                config.shared_cpu_cache_strict = True
+            else:
+                config.store_async = True
+                config.store_async_max_queue_size = 2
+                extra_config["use_ascend_direct"] = True
+            config.extra_config = extra_config
+        return upstream_validate_config(config)
+
+    lmcache.v1.config._CONFIG_DEFINITIONS["enable_shared_cpu_cache"] = {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Enable decode-node-local shared CPU cache handle "
+        "publication for rank0-only LMCache storage.",
+    }
+
+    lmcache.v1.config._CONFIG_DEFINITIONS["shared_cpu_cache_strict"] = {
+        "type": bool,
+        "default": True,
+        "env_converter": _to_bool,
+        "description": "Fail fast on invalid shared CPU cache config, missing "
+        "chunks, or unsafe handle/pointer validation.",
+    }
+
+    lmcache.v1.config._CONFIG_DEFINITIONS["shared_cpu_cache_name"] = {
+        "type": Optional[str],
+        "default": None,
+        "env_converter": str,
+        "description": "Optional debug override for the POSIX shm name. "
+        "Unset means rank0 derives a unique engine-local name.",
+    }
+
+    lmcache.v1.config._CONFIG_DEFINITIONS["shared_cpu_cache_size_gb"] = {
+        "type": Optional[float],
+        "default": None,
+        "env_converter": float,
+        "description": "Optional shared CPU slab size override in GB. "
+        "Unset means use effective max_local_cpu_size.",
+    }
+
+    lmcache.v1.config._CONFIG_DEFINITIONS["shared_cpu_cache_numa_policy"] = {
+        "type": str,
+        "default": "first_touch",
+        "env_converter": str,
+        "description": "NUMA placement for the shared CPU slab: "
+        "'first_touch' preserves the existing behavior; 'interleave' "
+        "distributes pages across allowed NUMA nodes.",
+    }
+
+    lmcache.v1.config._CONFIG_DEFINITIONS["shared_cpu_cache_numa_nodes"] = {
+        "type": str | int | list[int] | None,
+        "default": None,
+        "env_converter": lambda value: value,
+        "description": "Optional NUMA node list for shared CPU slab "
+        "interleaving. Unset means all nodes allowed to the process.",
+    }
+
+    lmcache.v1.config._CONFIG_DEFINITIONS[
+        "shared_cpu_materialize_index_on_decode_cold"
+    ] = {
+        "type": bool,
+        "default": True,
+        "env_converter": _to_bool,
+        "description": "Materialize DSA index during sparse decode cold "
+        "bootstrap when dsa_two_groups=true.",
+    }
+
+    lmcache.v1.config._CONFIG_DEFINITIONS[
+        "shared_cpu_cache_passive_writable"
+    ] = {
+        "type": Optional[bool],
+        "default": None,
+        "env_converter": _to_bool,
+        "description": "Optional passive-rank shm mmap mode override. "
+        "Unset means try read-only first and retry read-write if host "
+        "registration requires it.",
+    }
+
+    # Add new config item for p2p npu usage
+    lmcache.v1.config._CONFIG_DEFINITIONS["p2p_use_npu"] = {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Whether to use NPU memory for P2P transfers. "
+        "If True, the P2P transfers will be performed on NPU. ",
+    }
+
+    # Add new p2p_npu_buffer_size config
+    lmcache.v1.config._CONFIG_DEFINITIONS["p2p_npu_buffer_size"] = {
+        "type": int,
+        "default": 1 * 1024 * 1024 * 1024,
+        "env_converter": int,
+        "description": "The total buffer size in bytes for P2P transfers. "
+        "This config is only used when p2p_use_npu is set to True.",
+    }
+
+    # Add new p2p_pull_mode config
+    lmcache.v1.config._CONFIG_DEFINITIONS["p2p_pull_mode"] = {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Whether to use pull mode for P2P transfers "
+        "when using NPU memory. If False, push mode will be used. "
+        "This config is only used when p2p_use_npu is set to True.",
+    }
+
+    # Add new p2p_delay_pull config
+    lmcache.v1.config._CONFIG_DEFINITIONS["p2p_delay_pull"] = {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Whether to delay the pull operation for P2P transfers "
+        "when using NPU memory. If True, the pull operation will be delayed "
+        "until the data is actually needed. This can help improve performance "
+        "in some cases. This config is only used when p2p_use_npu is set to True "
+        "and p2p_pull_mode is set to True.",
+    }
+
+    # Add new p2p_pull_pending_ttl config
+    lmcache.v1.config._CONFIG_DEFINITIONS["p2p_pull_pending_ttl"] = {
+        "type": float,
+        "default": 360.0,
+        "env_converter": float,
+        "description": "TTL in seconds for pull-pending entries on the sender side. "
+        "If a receiver crashes and never sends PullDoneSignal, "
+        "pinned MemObjs are released after this timeout. "
+        "This config is only used when p2p_pull_mode is set to True.",
+    }
+
+    # Add new pd_pull_mode config
+    lmcache.v1.config._CONFIG_DEFINITIONS["pd_pull_mode"] = {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Whether to use pull mode for PD disaggregated transfers. "
+        "In pull mode the receiver (decoder) reads KV cache data from the "
+        "sender (prefiller) on-demand during batched_to_gpu, using a pipelined "
+        "ping-pong approach that overlaps RDMA reads with KV cache scatter. "
+        "This avoids bulk NPU memory pre-allocation on the receiver side.",
+    }
+
+    # Add new pd_delay_pull config
+    lmcache.v1.config._CONFIG_DEFINITIONS["pd_delay_pull"] = {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Whether to delay the pull operation for "
+        "PD disaggregated transfers when using NPU memory. "
+        "If True, the pull operation will be delayed "
+        "until the data is actually needed. "
+        "This can help improve performance in some cases. "
+        "This config is only used when "
+        "pd_pull_mode is set to True and pd_use_npu is set to True."
+        "Set at the receiver side.",
+    }
+
+    # Add new pd_pull_done_port config (list of ports, one per TP rank)
+    lmcache.v1.config._CONFIG_DEFINITIONS["pd_pull_done_port"] = {
+        "type": list,
+        "default": None,
+        "env_converter": _to_int_list,
+        "description": "List of ports (one per TP rank) on which the sender "
+        "binds a ZMQ PULL socket to receive Done signals from the receiver "
+        "in PD pull mode.  If not set, the port is derived as "
+        "peer_alloc_port + 100.  Example: [18100, 18101].",
+    }
+
+    # Add pd_use_cpu_offload config
+    lmcache.v1.config._CONFIG_DEFINITIONS["pd_use_cpu_offload"] = {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Whether to use CPU offload for PD transfers. "
+        "If True, the KV caches will be offloaded to CPU first "
+        "and then transferred to remote npu later. "
+        "This config is only used when the role is `sender` "
+        "and pd_pull_mode is set to True.",
+    }
+
+    # Add pd_cpu_buffer_size config
+    lmcache.v1.config._CONFIG_DEFINITIONS["pd_cpu_buffer_size"] = {
+        "type": int,
+        "default": None,
+        "env_converter": int,
+        "description": "The total buffer size in bytes for PD CPU offload. "
+        "This config is used when the role is `sender`, "
+        "because the kvcaches can be offloaded to cpu first, "
+        "and then transferred to remote npu later. "
+        "This config is only used when pd_pull_mode is set to True.",
+    }
+
+    # Add pd_alloc_fail_backoff_ttl config
+    lmcache.v1.config._CONFIG_DEFINITIONS["pd_alloc_fail_backoff_ttl"] = {
+        "type": float,
+        "default": 2.0,
+        "env_converter": float,
+        "description": "The timeout in seconds for the allocation failure backoff. "
+        "This config is used to avoid infinite loop for memory allocation.",
+    }
+
+    # Add pd_pull_pending_ttl config
+    lmcache.v1.config._CONFIG_DEFINITIONS["pd_pull_pending_ttl"] = {
+        "type": float,
+        "default": 360.0,
+        "env_converter": float,
+        "description": "TTL in seconds for pull-pending entries on the sender side. "
+        "If a receiver crashes and never sends PullDoneSignal, "
+        "pinned MemObjs are released after this timeout. "
+        "This config is only used when pd_pull_mode is set to True.",
+    }
+
+    # Add pd_pull_backpressure_reserve_pct config
+    lmcache.v1.config._CONFIG_DEFINITIONS["pd_pull_backpressure_reserve_pct"] = {
+        "type": float,
+        "default": 2.0,
+        "env_converter": float,
+        "description": "Percentage of the sender buffer pool to reserve as free "
+        "headroom in pull mode. New put tasks block when pinned pages "
+        "exceed (1 - reserve_pct/100) * total_pages. "
+        "This config is only used when pd_pull_mode is set to True.",
+    }
+
+    # Add store async
+    lmcache.v1.config._CONFIG_DEFINITIONS["store_async"] = {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Whether to use store kvcache asynchronously. "
+        "If True, the kvcache will be stored asynchronously. ",
+    }
+
+    # Add async store queue size. 0 keeps queue unbounded.
+    lmcache.v1.config._CONFIG_DEFINITIONS["store_async_max_queue_size"] = {
+        "type": int,
+        "default": 0,
+        "env_converter": int,
+        "description": "Maximum number of pending async store tasks in queue. "
+        "Set 0 for an unbounded queue; values > 0 enable bounded backpressure.",
+    }
+
+    namespace_extras = {
+        "validate": _validate_ascend_config,
+        "log_config": lmcache.v1.config._log_config,
+        "get_extra_config_value": lmcache.v1.config._get_extra_config_value,
+        "get_lmcache_worker_ids": lmcache.v1.config._get_lmcache_worker_ids,
+        "from_legacy": classmethod(lmcache.v1.config._from_legacy),
+        "get_lookup_server_worker_ids": lmcache.v1.config._get_lookup_server_worker_ids,
+    }
+
+    # Re-create the configuration class with the updated definitions
+    lmcache.v1.config.LMCacheEngineConfig = create_config_class(
+        config_name="LMCacheEngineConfig",
+        config_definitions=lmcache.v1.config._CONFIG_DEFINITIONS,
+        config_aliases=lmcache.v1.config._CONFIG_ALIASES,
+        deprecated_configs=lmcache.v1.config._DEPRECATED_CONFIGS,
+        namespace_extras=namespace_extras,
+    )
+
+    # If lmcache.integration.vllm.utils was already imported before this
+    # patch ran, its module-level ``LMCacheEngineConfig`` still points to
+    # the OLD class whose ``_from_file`` closure now iterates the mutated
+    # _CONFIG_DEFINITIONS dict (with keys like ``p2p_use_npu``), while the
+    # OLD ``__init__`` doesn't accept them -> TypeError. Fix by updating
+    # the stale reference.
+    _utils_mod = sys.modules.get("lmcache.integration.vllm.utils")
+    if _utils_mod is not None:
+        _utils_mod.LMCacheEngineConfig = lmcache.v1.config.LMCacheEngineConfig
+
+
+def _patch_ops():
+    # Standard
+    from enum import IntEnum
+
+    # First Party
+    import lmcache_ascend.c_ops as ascend_c_ops
+
+    # LMCache v0.4.2 introduces GPUKVFormat enum in c_ops (CUDA pybind).
+    # Ascend c_ops doesn't have it, so we provide a compatible mock
+    # to avoid AttributeError when upstream code references it.
+    if not hasattr(ascend_c_ops, "GPUKVFormat"):
+
+        class GPUKVFormat(IntEnum):
+            NB_NL_TWO_BS_NH_HS = 0
+            NL_X_TWO_NB_BS_NH_HS = 1
+            NL_X_NB_TWO_BS_NH_HS = 2
+            NL_X_NB_BS_HS = 3
+            TWO_X_NL_X_NBBS_NH_HS = 4
+            NL_X_NBBS_ONE_HS = 5
+            NL_X_TWO_NB_NH_BS_HS = 6
+            NL_X_NB_TWO_NH_BS_HS = 7
+
+        ascend_c_ops.GPUKVFormat = GPUKVFormat
+
+    sys.modules["lmcache.c_ops"] = ascend_c_ops
+    # When torch.cuda.is_available() is False, upstream memory_management imports
+    # non_cuda_equivalents whose alloc_pinned_ptr is not aclrtHostRegister'd.
+    # Ascend KV kernels require host-registered CPU buffers (get_device_ptr).
+    sys.modules["lmcache.non_cuda_equivalents"] = ascend_c_ops
+
+
+def _patch_storage_backend_init():
+    # Third Party
+    import lmcache.v1.storage_backend as lm_storage_backend
+
+    # First Party
+    from lmcache_ascend.v1.storage_backend import (
+        CreateStorageBackends as ascend_create_storage_backends,
+    )
+
+    lm_storage_backend.CreateStorageBackends = ascend_create_storage_backends
+
+
+def _patch_torch_capability():
+    # Third Party
+    from torch_npu.contrib import transfer_to_npu  # noqa: F401
+    import torch
+
+    # Note: torch_npu do not support get_device_capability
+    capability_mock = lambda *args: (0, 0)
+    torch.npu.get_device_capability = capability_mock
+
+
+def _patch_transfer_channel():
+    # First Party
+    from lmcache_ascend.v1.transfer_channel import (
+        get_correct_device as ascend_get_correct_device,
+    )
+
+    sys.modules[
+        "lmcache.v1.transfer_channel.transfer_utils"
+    ].get_correct_device = ascend_get_correct_device
+
+
+def _patch_cacheblend():
+    # Third Party
+    from lmcache.v1.compute.blend.utils import LMCBlenderBuilder
+
+    # First Party
+    from lmcache_ascend.v1.blend.utils import get_or_create_blender
+
+    LMCBlenderBuilder.get_or_create = partial(get_or_create_blender, LMCBlenderBuilder)
+
+
+def _patch_multi_process():
+    # Third Party
+    import lmcache.v1.multiprocess.custom_types as lm_mp_types
+
+    # First Party
+    from lmcache_ascend.v1.multiprocess.custom_types import AscendIPCWrapper
+
+    lm_mp_types.CudaIPCWrapper = AscendIPCWrapper
+
+
+def _patch_kv_layer_group():
+    # Third Party
+    from lmcache.v1.kv_layer_groups import KVLayerGroupInfo, KVLayerGroupsManager
+
+    # First Party
+    import lmcache_ascend.v1.kv_layer_groups as ascend_kv_layer_groups
+
+    KVLayerGroupsManager.build_kv_layer_groups = (
+        ascend_kv_layer_groups.build_kv_layer_groups
+    )
+    KVLayerGroupInfo.hidden_dim_size = property(
+        ascend_kv_layer_groups.patched_hidden_dim_size
+    )
+
+
+def _patch_gpu_connector():
+    """Patch CreateGPUConnector to return NPU connectors on Ascend.
+
+    In LMCache 0.4.2, engine initialization uses CreateGPUConnector()
+    as a factory function. We patch it to return Ascend NPU connectors
+    instead of the default CUDA ones.
+
+    ``permute_kv_caches_to_contiguous`` must be patched on
+    ``lmcache.v1.gpu_connector.utils`` *before* importing
+    ``lmcache.v1.gpu_connector``, so the import in ``gpu_connectors`` binds
+    the Ascend implementation. If ``gpu_connectors`` was already loaded,
+    also replace its cached reference (same pattern as ``CreateGPUConnector``
+    on ``lmcache.v1.manager``).
+    """
+    # Standard
+
+    # Third Party
+    import lmcache.v1.gpu_connector.utils as gpu_utils
+
+    # First Party
+    from lmcache_ascend.v1.npu_connector.utils import permute_kv_caches_to_contiguous
+
+    gpu_utils.permute_kv_caches_to_contiguous = permute_kv_caches_to_contiguous
+
+    _gpu_connectors_mod = sys.modules.get("lmcache.v1.gpu_connector.gpu_connectors")
+    if _gpu_connectors_mod is not None:
+        _gpu_connectors_mod.permute_kv_caches_to_contiguous = (
+            permute_kv_caches_to_contiguous
+        )
+
+    # Third Party
+    import lmcache.v1.gpu_connector as lm_gpu_connector
+
+    # First Party
+    from lmcache_ascend.v1.npu_connector import CreateNPUConnector
+
+    lm_gpu_connector.CreateGPUConnector = CreateNPUConnector
+
+    # Also patch the reference in lmcache.v1.manager module, in case it
+    # was imported before this patch ran
+    _manager_mod = sys.modules.get("lmcache.v1.manager")
+    if _manager_mod is not None:
+        _manager_mod.CreateGPUConnector = CreateNPUConnector
+
+
+def _patch_get_vllm_torch_dev():
+    """Patch get_vllm_torch_dev to return NPU device on Ascend.
+
+    The upstream function only supports CUDA and XPU. This patch adds
+    NPU support by replacing the function with our Ascend-specific version.
+    """
+    # Third Party
+    import lmcache.integration.vllm.utils as lm_utils
+
+    # First Party
+    from lmcache_ascend.integration.vllm.utils import (
+        get_vllm_torch_dev as ascend_get_vllm_torch_dev,
+    )
+
+    lm_utils.get_vllm_torch_dev = ascend_get_vllm_torch_dev
+
+
+def _patch_vllm_v1_adapter():
+    # Third Party
+    from vllm.distributed.kv_transfer.kv_connector.v1 import (
+        lmcache_connector as vllm_lmcache_connector,
+    )
+    import lmcache.integration.vllm.vllm_v1_adapter as lmc_vllm_v1_adapter
+
+    # First Party
+    from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
+        LMCacheAscendConnectorV1Impl as ascend_LMCacheAscendConnectorV1Impl,
+    )
+
+    lmc_vllm_v1_adapter.LMCacheConnectorV1Impl = ascend_LMCacheAscendConnectorV1Impl
+
+    def handle_preemptions(self, preempted_req_ids):
+        method = getattr(self._lmcache_engine, "handle_preemptions", None)
+        if callable(method):
+            method(preempted_req_ids)
+
+    def uses_layerwise_model_callbacks(self):
+        return bool(getattr(self._lmcache_engine, "use_layerwise", False))
+
+    def supports_staged_sfa_sparse_load(self):
+        engine = self._lmcache_engine
+        config = getattr(engine, "config", None)
+        return bool(
+            getattr(engine, "use_layerwise", False)
+            and getattr(engine, "kv_role", None)
+            in ("kv_both", "kv_consumer")
+            and getattr(config, "dsa_two_groups", False)
+            and getattr(config, "enable_sparse_attention", False)
+        )
+
+    vllm_lmcache_connector.LMCacheConnectorV1.supports_dsa_index_lmcache = True
+    vllm_lmcache_connector.LMCacheConnectorV1.uses_layerwise_model_callbacks = property(
+        uses_layerwise_model_callbacks
+    )
+    vllm_lmcache_connector.LMCacheConnectorV1.supports_staged_sfa_sparse_load = (
+        property(supports_staged_sfa_sparse_load)
+    )
+    vllm_lmcache_connector.LMCacheConnectorV1.handle_preemptions = handle_preemptions
+
+
+def _patch_cache_engine():
+    # Third Party
+    import lmcache.v1.cache_engine as lmc_cache_engine
+
+    # First Party
+    from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine
+
+    lmc_cache_engine.LMCacheEngine = AscendLMCacheEngine
+
+    for mod_name in (
+        "lmcache.v1.manager",
+        "lmcache.integration.vllm.vllm_service_factory",
+        "lmcache.v1.standalone.standalone_service_factory",
+    ):
+        mod = sys.modules.get(mod_name)
+        if mod is not None and hasattr(mod, "LMCacheEngine"):
+            mod.LMCacheEngine = AscendLMCacheEngine
+
+
+def _patch_hash_token():
+    # On OpenEuler and python3.10,
+    # the _hash_tokens func hash(None) seems to run into
+    # ASLR lead to non-deterministic hashing for builtin hash
+    # Third Party
+    import lmcache.v1.token_database
+
+    # First Party
+    from lmcache_ascend.v1.tokens_hash import _hash_tokens
+
+    lmcache.v1.token_database.TokenDatabase._hash_tokens = _hash_tokens
+
+    # First Party
+    from lmcache_ascend.v1.token_database import TokenDatabase_process_tokens
+
+    lmcache.v1.token_database.SegmentTokenDatabase.process_tokens = (
+        TokenDatabase_process_tokens
+    )
+
+
+def _patch_lookup_client():
+    # Third Party
+    import lmcache.v1.lookup_client.lmcache_lookup_client as lmc_lookup_client
+
+    # First Party
+    from lmcache_ascend.v1.lookup_client.lmcache_lookup_client import (
+        normalize_token_ids,
+    )
+
+    lmc_lookup_client.LMCacheLookupClient.lookup = normalize_token_ids(
+        lmc_lookup_client.LMCacheLookupClient.lookup
+    )
+
+
+def _patch_sys_detection():
+    # Patching this as on some Ascend machines
+    # as the kernel can set the NUMA node to -1.
+    # If propagated in the NUMA mapping, this can cause failures to the caller.
+    # The patch sanitizes negative values with None,
+    # and is up to the caller to handle it.
+    # Third Party
+    import lmcache.v1.system_detection
+
+    # First Party
+    from lmcache_ascend.v1.system_detection import _read_from_sys
+
+    lmcache.v1.system_detection.NUMADetector._read_from_sys = _read_from_sys
+
+
+def _patch_sgl():
+    # Third Party
+    import lmcache.integration.sglang.sglang_adapter as lmc_sglang_adapter
+
+    # First Party
+    from lmcache_ascend.integration.sglang.sglang_adapter import (
+        LMCacheConnector__init__,
+        LMCacheLayerwiseConnector_global_min_tokens,
+        LMCacheLayerwiseConnector_start_load_kv,
+    )
+
+    lmc_sglang_adapter.LMCacheConnector.__init__ = LMCacheConnector__init__
+
+    lmc_sglang_adapter.LMCacheLayerwiseConnector.global_min_tokens = (
+        LMCacheLayerwiseConnector_global_min_tokens
+    )
+
+    lmc_sglang_adapter.LMCacheLayerwiseConnector.start_load_kv = (
+        LMCacheLayerwiseConnector_start_load_kv
+    )
+
+    # Third Party
+    import lmcache.v1.memory_management as lmc_memory_management
+
+    # First Party
+    from lmcache_ascend.v1.memory_management import GPUMemoryAllocator__init__
+
+    lmc_memory_management.GPUMemoryAllocator.__init__ = GPUMemoryAllocator__init__
+
+
+def _patch_rpc_utils():
+    # Patching this to fix socket path length issues on some systems.
+    # The original socket path can exceed Unix domain socket's 107 character
+    # limit, causing ZMQ errors. The patched version uses shorter, hash-based
+    # identifiers to ensure paths are always under the limit.
+    # Third Party
+    from lmcache.v1.lookup_client import (
+        lmcache_async_lookup_client as lmc_async_lookup_client,
+    )
+    from lmcache.v1.lookup_client import lmcache_lookup_client as lmc_lookup_client
+    import lmcache.v1.offload_server.zmq_server as zmq_server
+    import lmcache.v1.rpc_utils
+
+    # First Party
+    from lmcache_ascend.v1.rpc_utils import use_short_engine_id
+
+    get_zmq_rpc_path_lmcache = use_short_engine_id(
+        lmcache.v1.rpc_utils.get_zmq_rpc_path_lmcache
+    )
+
+    lmcache.v1.rpc_utils.get_zmq_rpc_path_lmcache = get_zmq_rpc_path_lmcache
+
+    lmc_lookup_client.get_zmq_rpc_path_lmcache = get_zmq_rpc_path_lmcache
+    lmc_async_lookup_client.get_zmq_rpc_path_lmcache = get_zmq_rpc_path_lmcache
+    zmq_server.get_zmq_rpc_path_lmcache = get_zmq_rpc_path_lmcache
+
+    # Also patch the factory module if already imported
+    _factory_mod = sys.modules.get("lmcache.v1.lookup_client.factory")
+    if _factory_mod is not None:
+        _factory_mod.get_zmq_rpc_path_lmcache = get_zmq_rpc_path_lmcache
+
+
+# Check if we've already patched to avoid redundant work
+if not LMCACHE_ASCEND_PATCHED:
+    # Standard
+    from functools import partial
+    import sys
+
+    _patch_config()
+
+    is_sgl = _is_sglang_runtime()
+    is_vllm = _is_vllm_runtime()
+
+    if _build_info.__framework_name__ == "pytorch":
+        # Third Party
+        # TODO (gingfung): Currently we patch all the cuda calls
+        # due to effort to port all torch.cuda will disabled torch.jit
+        # NOTE: this must be done early in the patch prior to the cache engine
+        # to avoid falling into non_cuda_equivalent
+        _patch_torch_capability()
+
+    _patch_ops()
+    if is_vllm:
+        _patch_get_vllm_torch_dev()
+        _patch_gpu_connector()
+
+    _patch_hash_token()
+
+    if _build_info.__framework_name__ == "pytorch":
+        _patch_storage_backend_init()
+        _patch_transfer_channel()
+        _patch_cacheblend()
+        _patch_multi_process()
+        _patch_lookup_client()
+        _patch_rpc_utils()
+
+    _patch_kv_layer_group()
+
+    if is_sgl:
+        _patch_sgl()
+    elif is_vllm:
+        if _build_info.__framework_name__ == "pytorch":
+            _patch_sys_detection()
+
+        _patch_vllm_v1_adapter()
+
+        _patch_cache_engine()
+
+    if _build_info.__framework_name__ == "mindspore":
+        # First Party
+        import lmcache_ascend.mindspore  # noqa: F401
+
+    LMCACHE_ASCEND_PATCHED = True
