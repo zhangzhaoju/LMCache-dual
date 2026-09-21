@@ -1,0 +1,3 @@
+[submodule "third_party/kvcache-ops"]
+	path = ascend/third_party/kvcache-ops
+	url = https://gitcode.com/gcw_LBsQh0mD/kvcache-ops.git

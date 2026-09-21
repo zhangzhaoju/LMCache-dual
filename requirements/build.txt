@@ -1,11 +1,9 @@
-# This should mirror the build dependencies in pyproject.toml
-
+setuptools>=77.0.3,<81.0.0
+wheel
+cmake>=3.26.1
 ninja
 packaging>=24.2
-setuptools>=77.0.3,<81.0.0
-setuptools_scm>=8
-# torch is not here because vllm installation will implicitly install it for the dockerfile
-# and users should be deliberate about choosing their torch version (or letting their serving
-# engine be deliberate for them)
-wheel
-
+pybind11
+jinja2
+torch==2.9.0
+torch-npu==2.9.0.post1+gitee7ba04
