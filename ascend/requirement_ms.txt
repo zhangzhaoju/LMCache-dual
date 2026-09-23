@@ -12,5 +12,5 @@ pyyaml
 pyzmq >= 25.0.0
 redis
 safetensors
-setuptools_scm>=8
+setuptools_scm>=10.2.3
 sortedcontainers
