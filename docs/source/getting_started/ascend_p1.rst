@@ -10,8 +10,10 @@ Prerequisites
 
 Use a dedicated container, not an active baseline service: aarch64, Python 3.11,
 Ascend910B3, CANN 8.5.1, torch 2.9.0 and torch_npu
-``2.9.0.post1+gitee7ba04``. Prepare ``requirements/build.txt`` and
+``2.9.0.post2``, Transformers ``5.2.0``. Prepare ``requirements/build.txt`` and
 ``requirements/ascend.txt`` from approved materials without replacing torch.
+These pins follow the reported intranet installation; metadata acceptance does
+not establish Transformers 5 runtime or native ABI compatibility.
 
 Source the approved CANN ``set_env.sh``. Set ``ASCEND_HOME_PATH``,
 ``SOC_VERSION=ascend910b3``, ``USE_MINDSPORE=0``, ``BUILD_WITH_HIP=0``,
