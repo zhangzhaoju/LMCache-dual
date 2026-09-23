@@ -2,7 +2,7 @@
 # Requirements for package build
 # Should be mirrored in requirements/build.txt (for builds external to setuptools)
 # P1 reuses the prepared intranet environment with --no-build-isolation.
-# Validate paired wheels; editable installs and automatic upgrades are disabled.
+# Paired wheels are the acceptance path; strict editable is for isolated debugging.
 requires = [
     "setuptools>=77.0.3,<81.0.0",
     "wheel",

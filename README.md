@@ -1,3 +1,6 @@
+> P1 Ascend-only fork: use the [P1 build/install guide](docs/source/getting_started/ascend_p1.rst)
+> and `python -B p1_dev.py --help`. Upstream GPU/pip instructions below are not the P1 entry point.
+
 <div align="center">
   <p align="center">
     <img src="https://raw.githubusercontent.com/LMCache/LMCache/dev/asset/logo.png" width="720" alt="lmcache logo">
