@@ -4,7 +4,7 @@
 # P1 reuses the prepared intranet environment with --no-build-isolation.
 # Paired wheels are the acceptance path; strict editable is for isolated debugging.
 requires = [
-    "setuptools>=77.0.3,<81.0.0",
+    "setuptools>=77.0.3,<85.0.0",
     "wheel",
     "cmake>=3.26.1",
     "ninja",
