@@ -7,7 +7,8 @@ Guidelines for AI coding agents (Copilot, Cursor, Claude Code, etc.) working in 
 The user authorized preserving P1 and starting vLLM P2 on 2026-09-27. Work on
 `p2`, retaining `p1` and `main` at the saved P1 input. This overrides the upstream
 `dev` branch and CUDA setup instructions below. LMCache runtime native integration
-belongs to P3; P2 only updates the paired development tooling as needed.
+belongs to P3; P2 updates paired development tooling and imports of vLLM's
+shared diagnostic, event-handoff and Mooncake contracts at their native owners.
 
 P1/baseline NPU retesting and known defect repairs are deferred by the user.
 Use available static and host checks on this source workstation; do not install
