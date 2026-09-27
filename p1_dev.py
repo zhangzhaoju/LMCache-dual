@@ -7,6 +7,11 @@ commands without compiling, installing or creating directories.
 
 from __future__ import annotations
 
+from email.parser import BytesParser
+from importlib import metadata
+from importlib.machinery import PathFinder
+from pathlib import Path
+
 # Standard
 import argparse
 import fnmatch
@@ -19,13 +24,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import zipfile
-from email.parser import BytesParser
-from importlib import metadata
-from importlib.machinery import PathFinder
-from pathlib import Path
-
 import tomllib
+import zipfile
 
 # Third Party
 from packaging.requirements import Requirement

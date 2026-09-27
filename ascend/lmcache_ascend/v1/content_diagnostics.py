@@ -15,6 +15,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
+from typing import Any, Iterable, Mapping, Sequence
 import hashlib
 import importlib
 import json
@@ -23,11 +24,11 @@ import re
 import sys
 import threading
 import time
-from typing import Any, Iterable, Mapping, Sequence
+
+import torch
 
 # Third Party
 from lmcache.logging import init_logger
-import torch
 
 logger = init_logger(__name__)
 
@@ -137,7 +138,7 @@ def npu_content_diagnostics_enabled() -> bool:
 
 def _configure_vllm_diagnostic_bridge(enabled: bool) -> None:
     """Install callbacks without importing LMCache from vLLM model modules."""
-    module_name = "vllm_ascend.lmcache_diagnostics"
+    module_name = "vllm.distributed.kv_transfer.lmcache_diagnostics"
     try:
         if enabled:
             bridge = importlib.import_module(module_name)

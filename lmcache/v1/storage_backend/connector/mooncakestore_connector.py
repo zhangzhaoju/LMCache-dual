@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Standard
-from functools import cached_property
-import asyncio
 from bisect import bisect_right
 from dataclasses import dataclass
+from functools import cached_property
 from importlib import import_module
-import json
-import os
 from threading import Lock
 from time import perf_counter, thread_time_ns
 from typing import Any, Callable, List, Optional, cast, no_type_check
+import asyncio
+import json
+import os
 
 # Third Party
 import torch
@@ -17,12 +17,11 @@ import torch
 # First Party
 from lmcache.logging import init_logger
 from lmcache.utils import CacheEngineKey, LayerCacheEngineKey
-from lmcache.v1.serving_perf import (
-    serving_perf_enabled,
-    serving_perf_log,
-    serving_perf_now,
-)
 from lmcache.v1.config import LMCacheEngineConfig
+from lmcache.v1.kv_layer_groups import (
+    resolve_kv_group_num_layers,
+    validate_two_group_layer_counts,
+)
 from lmcache.v1.memory_management import (
     LayerPageMemoryObj,
     MemoryFormat,
@@ -30,14 +29,10 @@ from lmcache.v1.memory_management import (
     _layer_page_shape,
 )
 from lmcache.v1.metadata import LMCacheMetadata
-from lmcache.v1.kv_layer_groups import (
-    resolve_kv_group_num_layers,
-    validate_two_group_layer_counts,
-)
 from lmcache.v1.mooncake_key_trace import trace_mooncake_keys
 from lmcache.v1.mooncake_layout import (
-    mooncake_legacy_key,
     mooncake_layer_pages_enabled,
+    mooncake_legacy_key,
     mooncake_page_key,
     mooncake_valid_tokens,
     resolve_mooncake_dsa_raw_token_dims,
@@ -45,18 +40,31 @@ from lmcache.v1.mooncake_layout import (
 from lmcache.v1.protocol import RemoteMetadata
 from lmcache.v1.remote_fill.mooncake_transport import (
     MooncakeDirectPushTransport as MooncakeDirectPushTransport,
+)
+from lmcache.v1.remote_fill.mooncake_transport import (
     direct_push_owner_ranges as _direct_push_owner_ranges,
+)
+from lmcache.v1.remote_fill.mooncake_transport import (
     drain_native_task as _drain_native_task,
+)
+from lmcache.v1.remote_fill.mooncake_transport import (
     validate_direct_push_activation as _validate_direct_push_activation,
+)
+from lmcache.v1.remote_fill.mooncake_transport import (
     validate_direct_push_source_ranges,
 )
-from lmcache.v1.remote_fill.protocol import DestinationPageDescriptor
 from lmcache.v1.remote_fill.native import (
     DirectPushSourcePlan,
     NativeDirectPushActivation,
     NativeDirectPushResult,
     NativeExternalPageTransferUnknownError,
     PreparedDirectPushSource,
+)
+from lmcache.v1.remote_fill.protocol import DestinationPageDescriptor
+from lmcache.v1.serving_perf import (
+    serving_perf_enabled,
+    serving_perf_log,
+    serving_perf_now,
 )
 from lmcache.v1.storage_backend.connector.base_connector import RemoteConnector
 from lmcache.v1.storage_backend.local_cpu_backend import LocalCPUBackend
@@ -116,7 +124,7 @@ async def _wait_external_native_until_hard_deadline(
 def _shared_vllm_mooncake_transport() -> tuple[Any, str, Any, Any]:
     """Borrow vLLM-Ascend's process-wide Mooncake engine and registry."""
     global_te = import_module(
-        "vllm_ascend.distributed.kv_transfer.utils.mooncake_transfer_engine"
+        "vllm.distributed.kv_transfer.ascend.utils.mooncake_transfer_engine"
     ).global_te
     hostname = import_module("vllm.utils.network_utils").get_ip()
     engine = global_te.get_transfer_engine(hostname, device_name=None)
