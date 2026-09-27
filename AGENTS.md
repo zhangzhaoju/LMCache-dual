@@ -2,6 +2,18 @@
 
 Guidelines for AI coding agents (Copilot, Cursor, Claude Code, etc.) working in this repository.
 
+## Current fork: paired P2 development
+
+The user authorized preserving P1 and starting vLLM P2 on 2026-09-27. Work on
+`p2`, retaining `p1` and `main` at the saved P1 input. This overrides the upstream
+`dev` branch and CUDA setup instructions below. LMCache runtime native integration
+belongs to P3; P2 only updates the paired development tooling as needed.
+
+P1/baseline NPU retesting and known defect repairs are deferred by the user.
+Use available static and host checks on this source workstation; do not install
+torch/CANN or build native artifacts. NPU/ABI validation remains pending for
+the prepared intranet environment, and P1 acceptance remains incomplete.
+
 ## Project Overview
 
 LMCache is a KV cache management engine for LLM serving that reduces Time To First Token (TTFT) and increases throughput. It stores KV caches across multiple tiers (GPU, CPU, disk, S3) and integrates with vLLM and SGLang.
@@ -201,4 +213,3 @@ When reviewing code (or self-checking before submitting), verify all of the foll
 - [ ] No unnecessary memory copies or allocations in hot paths.
 - [ ] Thread safety is maintained for shared data structures.
 - [ ] CUDA/GPU resources are properly managed (allocated, freed, synchronized).
-
