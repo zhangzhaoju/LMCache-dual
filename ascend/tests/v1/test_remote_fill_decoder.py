@@ -34,12 +34,12 @@ import msgspec
 import torch
 
 # First Party
-from lmcache_ascend.v1.cache_engine import (
-    AscendLMCacheEngine,
+from lmcache.v1.cache_engine import (
+    LMCacheEngine,
     _remote_fill_advertise_host_from_session,
     _validate_remote_fill_control_port,
 )
-from lmcache_ascend.v1.remote_fill import (
+from lmcache.v1.remote_fill.npu_transport import (
     AscendRemoteFillPageLifecycle,
     DecoderRemoteFillRuntime,
     DecoderRemoteFillServiceHost,
@@ -49,12 +49,15 @@ from lmcache_ascend.v1.remote_fill import (
     create_decoder_remote_fill_runtime,
     remote_fill_token_hash_identity,
 )
-from lmcache_ascend.v1.remote_fill_producer import RemoteFillFatalError
-from lmcache_ascend.v1.remote_fill_coordinator import ProducerRequestState, RemoteFillCoordinator
+from lmcache.v1.remote_fill_producer import RemoteFillFatalError
+from lmcache.v1.remote_fill_coordinator import (
+    ProducerRequestState,
+    RemoteFillCoordinator,
+)
 
 
 def test_post_init_emits_startup_stage_timings() -> None:
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.metadata = SimpleNamespace(worker_id=1)
     engine.config = SimpleNamespace(
         dsa_group1_load_mode="persistent_direct_hbm",
@@ -70,16 +73,16 @@ def test_post_init_emits_startup_stage_timings() -> None:
     with (
         patch.object(LMCacheEngine, "post_init"),
         patch(
-            "lmcache_ascend.v1.cache_engine.serving_perf_enabled",
+            "lmcache.v1.cache_engine.serving_perf_enabled",
             return_value=True,
         ),
         patch(
-            "lmcache_ascend.v1.cache_engine.serving_perf_now",
+            "lmcache.v1.cache_engine.serving_perf_now",
             side_effect=[1.0, 2.0, 3.0],
         ),
-        patch("lmcache_ascend.v1.cache_engine.serving_perf_log") as perf_log,
+        patch("lmcache.v1.cache_engine.serving_perf_log") as perf_log,
         patch(
-            "lmcache_ascend.v1.cache_engine.RemoteExternalPageReader",
+            "lmcache.v1.cache_engine.RemoteExternalPageReader",
             return_value=reader,
         ),
     ):
@@ -236,10 +239,7 @@ def test_decoder_layout_validation_uses_registered_groups_before_lazy_connector(
             torch.bfloat16,
         ),
         KVLayerGroupInfo(
-            [
-                f"model.layers.{index}.self_attn.indexer.k_cache"
-                for index in range(79)
-            ],
+            [f"model.layers.{index}.self_attn.indexer.k_cache" for index in range(79)],
             list(range(79)),
             torch.Size([8757, 128, 128]),
             torch.bfloat16,
@@ -251,7 +251,7 @@ def test_decoder_layout_validation_uses_registered_groups_before_lazy_connector(
         layout_tag="payload-v3",
         num_layers=79,
     )
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.metadata = metadata
     engine.config = config
     engine.dsa_two_groups = True
@@ -261,16 +261,12 @@ def test_decoder_layout_validation_uses_registered_groups_before_lazy_connector(
 
     engine._validate_remote_fill_decoder_layout(layout)
 
-    assert engine._expected_shared_cpu_chunk_metadata(
-        kv_group=0, num_tokens=1
-    ) == (
+    assert engine._expected_shared_cpu_chunk_metadata(kv_group=0, num_tokens=1) == (
         torch.Size([576]),
         torch.bfloat16,
         MemoryFormat.KV_MLA_LATENT_FMT,
     )
-    assert engine._expected_shared_cpu_chunk_metadata(
-        kv_group=1, num_tokens=1
-    ) == (
+    assert engine._expected_shared_cpu_chunk_metadata(kv_group=1, num_tokens=1) == (
         torch.Size([128]),
         torch.bfloat16,
         MemoryFormat.KV_DSA_INDEX_FMT,
@@ -322,7 +318,7 @@ def test_decoder_layout_validation_rejects_unequal_group_layer_coverage(
         layout_tag="payload-v3",
         num_layers=81,
     )
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.metadata = metadata
     engine.config = config
     engine.dsa_two_groups = True
@@ -556,13 +552,13 @@ class _FakeCapabilityBackend:
 
 class _FakeCapabilityEngine:
     _remote_fill_group1_startup_identity = (
-        AscendLMCacheEngine._remote_fill_group1_startup_identity
+        LMCacheEngine._remote_fill_group1_startup_identity
     )
     _validate_remote_fill_decoder_layout = (
-        AscendLMCacheEngine._validate_remote_fill_decoder_layout
+        LMCacheEngine._validate_remote_fill_decoder_layout
     )
     _preflight_remote_fill_shared_group1 = (
-        AscendLMCacheEngine._preflight_remote_fill_shared_group1
+        LMCacheEngine._preflight_remote_fill_shared_group1
     )
 
     def __init__(
@@ -614,8 +610,11 @@ class _FakeCapabilityEngine:
         return None
 
     def _make_shared_handle_batch(
-        self, memory_objs: list[list[Any]], keys: list[list[CacheEngineKey]],
-        *, kv_group: int,
+        self,
+        memory_objs: list[list[Any]],
+        keys: list[list[CacheEngineKey]],
+        *,
+        kv_group: int,
     ) -> SharedHandleBatch:
         assert kv_group == 1
         assert all(layer == [self._page] for layer in memory_objs)
@@ -1397,8 +1396,10 @@ def test_info_logging_skips_reserve_serialization(monkeypatch, caplog) -> None:
     dumps = Mock(side_effect=AssertionError("reserve event must stay below INFO"))
 
     with monkeypatch.context() as context:
-        context.setattr("lmcache_ascend.v1.remote_fill.json.dumps", dumps)
-        with caplog.at_level(logging.INFO, logger="lmcache_ascend.v1.remote_fill"):
+        context.setattr("lmcache.v1.remote_fill.npu_transport.json.dumps", dumps)
+        with caplog.at_level(
+            logging.INFO, logger="lmcache.v1.remote_fill.npu_transport"
+        ):
             prepared = lifecycle.prepare_pages("transfer", 0, controls, True)
 
     assert not dumps.called
@@ -1439,7 +1440,7 @@ def test_busy_service_does_not_run_maintenance_per_rpc(monkeypatch) -> None:
                 self.stop.set()
             return True
 
-    monkeypatch.setattr("lmcache_ascend.v1.remote_fill.monotonic", lambda: 0.0)
+    monkeypatch.setattr("lmcache.v1.remote_fill.npu_transport.monotonic", lambda: 0.0)
     service = _FakeService()
     server = _BusyServer()
     host = DecoderRemoteFillServiceHost(
@@ -1506,7 +1507,7 @@ def test_unarmed_service_failure_stops_decoder_placement_advertisement() -> None
         host=host,
         placement=SimpleNamespace(to_dict=lambda: {"enabled": True}),
     )
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine._remote_fill_runtime = runtime
     engine._init_failed = False
     engine._health_monitor = None
@@ -1569,11 +1570,11 @@ def test_service_host_emits_only_changed_fixed_cardinality_metrics(
     )
     events: list[tuple[str, dict[str, object]]] = []
     monkeypatch.setattr(
-        "lmcache_ascend.v1.remote_fill._log_remote_fill_event",
+        "lmcache.v1.remote_fill.npu_transport._log_remote_fill_event",
         lambda event, level=logging.INFO, **fields: events.append((event, fields)),
     )
 
-    with caplog.at_level(logging.DEBUG, logger="lmcache_ascend.v1.remote_fill"):
+    with caplog.at_level(logging.DEBUG, logger="lmcache.v1.remote_fill.npu_transport"):
         host._emit_metrics_if_changed(force=True)
         assert events == []
 
@@ -1597,7 +1598,7 @@ def test_service_host_emits_only_changed_fixed_cardinality_metrics(
 def test_engine_close_retains_allocator_when_native_destination_is_armed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     base_close_calls = 0
 
     class _FatalRuntime:
@@ -1620,11 +1621,11 @@ def test_engine_close_retains_allocator_when_native_destination_is_armed(
 
 
 def test_producer_and_decoder_fatal_paths_share_one_supervisor_latch() -> None:
-    from lmcache_ascend.integration.vllm.lmcache_ascend_connector_v1 import (
-        LMCacheAscendConnectorV1Dynamic,
+    from lmcache.integration.vllm.lmcache_connector_v1 import (
+        LMCacheConnectorV1Dynamic,
     )
 
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine._remote_fill_fatal_transfers = ()
     failures: list[str] = []
     engine.mark_init_failed = failures.append
@@ -1632,13 +1633,17 @@ def test_producer_and_decoder_fatal_paths_share_one_supervisor_latch() -> None:
     future: Future = Future()
     future.set_exception(RemoteFillFatalError("native completion unknown"))
     engine._remote_fill_coordinator = RemoteFillCoordinator(
-        config=SimpleNamespace(), tp_size=1, storage_manager=object(),
+        config=SimpleNamespace(),
+        tp_size=1,
+        storage_manager=object(),
         fatal_reporter=engine._remote_fill_require_paired_restart,
     )
-    producer_state = SimpleNamespace(remote_fill=ProducerRequestState(
-        handoff=SimpleNamespace(transfer_id="producer-transfer"),
-        futures=deque((future,)),
-    ))
+    producer_state = SimpleNamespace(
+        remote_fill=ProducerRequestState(
+            handoff=SimpleNamespace(transfer_id="producer-transfer"),
+            futures=deque((future,)),
+        )
+    )
     with pytest.raises(RemoteFillFatalError):
         engine._wait_remote_fill_windows(producer_state)
     engine._remote_fill_require_paired_restart(("decoder-transfer", ""))
@@ -1650,14 +1655,14 @@ def test_producer_and_decoder_fatal_paths_share_one_supervisor_latch() -> None:
     )
     assert len(failures) == 1
 
-    connector = object.__new__(LMCacheAscendConnectorV1Dynamic)
+    connector = object.__new__(LMCacheConnectorV1Dynamic)
     connector._lmcache_engine = SimpleNamespace(lmcache_engine=engine)
     assert connector.remote_fill_requires_paired_restart()
 
 
 def test_standalone_connector_forwards_remote_fill_contract() -> None:
-    from lmcache_ascend.integration.vllm.lmcache_ascend_connector_v1 import (
-        LMCacheAscendConnectorV1Dynamic,
+    from lmcache.integration.vllm.lmcache_connector_v1 import (
+        LMCacheConnectorV1Dynamic,
     )
 
     context = object()
@@ -1669,20 +1674,18 @@ def test_standalone_connector_forwards_remote_fill_contract() -> None:
             remote_fill_requires_paired_restart=lambda: True,
         ),
     )
-    connector = object.__new__(LMCacheAscendConnectorV1Dynamic)
+    connector = object.__new__(LMCacheConnectorV1Dynamic)
     connector._lmcache_engine = implementation
 
     assert connector.capture_live_source_event_handoff(context)
-    implementation.capture_live_source_event_handoff.assert_called_once_with(
-        context
-    )
+    implementation.capture_live_source_event_handoff.assert_called_once_with(context)
     assert connector.get_remote_fill_placement_info() == {"control_port": 19001}
     assert connector.get_remote_fill_metrics() == {"active_transactions": 1}
     assert connector.remote_fill_requires_paired_restart()
 
 
 def test_standalone_connector_injects_destination_dp_identity() -> None:
-    from lmcache_ascend.integration.vllm import lmcache_ascend_connector_v1 as module
+    from lmcache.integration.vllm import lmcache_ascend_connector_v1 as module
 
     transfer = SimpleNamespace(kv_connector_extra_config={"preserved": True})
     config = SimpleNamespace(
@@ -1698,7 +1701,7 @@ def test_standalone_connector_injects_destination_dp_identity() -> None:
         "__init__",
         return_value=None,
     ) as base_init:
-        module.LMCacheAscendConnectorV1Dynamic(config, object())
+        module.LMCacheConnectorV1Dynamic(config, object())
 
     assert transfer.kv_connector_extra_config == {
         "preserved": True,
@@ -1711,7 +1714,7 @@ def test_standalone_connector_injects_destination_dp_identity() -> None:
 def test_engine_close_reaches_allocator_after_safe_remote_fill_shutdown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     base_close_calls = 0
 
     class _SafeRuntime:
@@ -1724,12 +1727,12 @@ def test_engine_close_reaches_allocator_after_safe_remote_fill_shutdown(
 
     monkeypatch.setattr(LMCacheEngine, "close", base_close)
     monkeypatch.setattr(
-        AscendLMCacheEngine,
+        LMCacheEngine,
         "close_remote_fill_producer",
         lambda self: None,
     )
     monkeypatch.setattr(
-        AscendLMCacheEngine,
+        LMCacheEngine,
         "wait_for_direct_stores",
         lambda self, states: None,
     )
@@ -1751,7 +1754,7 @@ def test_engine_close_reaches_allocator_after_safe_remote_fill_shutdown(
 def test_prefiller_fatal_close_retains_native_owned_memory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     base_close = Mock()
     runtime = Mock()
     reader = Mock()
@@ -1769,7 +1772,7 @@ def test_prefiller_fatal_close_retains_native_owned_memory(
 
 
 def test_decoder_remote_fill_startup_is_idempotent_after_success() -> None:
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine._remote_fill_decoder_initialized = True
 
     # The success guard must precede every config, topology, collective, and
@@ -1931,10 +1934,7 @@ def test_nonbuiltin_hash_ignores_unrelated_python_hash_seed(
         server_factory=lambda service: _FakeServer(),
     )
 
-    assert (
-        runtime.placement.token_hash_algorithm
-        == "sha256_cbor_64bit:bytes:32"
-    )
+    assert runtime.placement.token_hash_algorithm == "sha256_cbor_64bit:bytes:32"
     assert runtime.placement.python_hash_seed == ""
     runtime.close()
 
@@ -1945,7 +1945,7 @@ def test_runtime_rotates_verification_capability_per_incarnation(
     monkeypatch.setenv("PYTHONHASHSEED", "0")
     capabilities = iter((b"a" * 32, b"b" * 32))
     monkeypatch.setattr(
-        "lmcache_ascend.v1.remote_fill.secrets.token_bytes",
+        "lmcache.v1.remote_fill.npu_transport.secrets.token_bytes",
         lambda size: next(capabilities),
     )
     common = dict(
@@ -2014,9 +2014,7 @@ def test_runtime_separates_bind_and_ipv6_advertised_host(
     runtime.close()
 
 
-@pytest.mark.parametrize(
-    "host", ["0.0.0.0", "::", "[::]", "127.0.0.1", "localhost"]
-)
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "[::]", "127.0.0.1", "localhost"])
 def test_runtime_rejects_nonroutable_advertised_host(
     monkeypatch: pytest.MonkeyPatch, host: str
 ) -> None:

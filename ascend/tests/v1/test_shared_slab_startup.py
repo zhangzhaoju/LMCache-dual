@@ -9,7 +9,7 @@ import uuid
 import pytest
 
 # First Party
-import lmcache_ascend.c_ops as lmc_ops
+import lmcache.c_ops as lmc_ops
 
 
 @pytest.mark.parametrize("size", [2 << 20, 4 << 20])

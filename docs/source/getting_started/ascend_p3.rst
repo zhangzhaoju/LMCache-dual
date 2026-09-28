@@ -1,65 +1,79 @@
 P3 native Ascend integration
 ============================
 
-The ``p3`` branch includes the complete P2 input
-``cfe8a1754db743d41c8bb63f8d02ad7c3051948c``. The retained ``p2``, ``p1`` and
-``main`` branches are unchanged. P2/P3 runtime validation is planned together
-in the prepared intranet environment; no phase is accepted by branch creation.
+The P3 source implementation includes the complete retained P2 input
+``cfe8a1754db743d41c8bb63f8d02ad7c3051948c``. Configuration, engine, adapter,
+NPU connector, memory, IPC and transport now have canonical LMCache owners.
+Source delivery is not native-build or inference acceptance.
 
-P3-01: configuration ownership
-------------------------------
+Native ownership
+----------------
 
-``lmcache.v1.config.LMCacheEngineConfig`` is created once with all 23 Ascend
-fields previously installed by the plugin (eight existing shared-CPU fields
-and fifteen transport/asynchronous-store fields). RemoteFill normalization runs
-before validation, preserving sender async store, receiver strict shared-CPU
-publication, two-group DSA and direct-HBM metadata restrictions. No plugin
-import is needed to parse or validate these settings::
+* ``lmcache.v1.config`` defines all 23 former plugin fields once.
+* ``lmcache.v1.cache_engine.LMCacheEngine`` and
+  ``lmcache.integration.vllm.vllm_v1_adapter.LMCacheConnectorV1Impl``
+  incorporate the effective Ascend methods. Explicit ``_common_*`` delegation
+  retains shared checkpoint, key/group, async-store and cleanup behavior.
+* ``lmcache.v1.device_connector.DeviceConnectorInterface`` is the neutral
+  transfer contract. Native NPU classes implement it directly, not through
+  GPU connector inheritance. Existing transfer method and layout-tag names
+  remain unchanged for protocol compatibility.
+* ``lmcache.c_ops`` owns Ascend kernels and registered host memory. HCCL/HIXL
+  extensions and libraries are installed alongside it in ``lmcache``.
+* Storage factories, PD/P2P, token hashing, lookup normalization, NUMA discovery,
+  RPC naming and ``NPUIPCWrapper`` no longer require import-time patches.
 
-   from lmcache.v1.config import LMCacheEngineConfig
+The original plugin and GPU connector sources are reference-only under
+``ascend/legacy-p3`` and excluded from distributions. There is no importable
+``lmcache_ascend`` compatibility shell. Importing the native runtime does not
+use ``transfer_to_npu`` or replace modules in ``sys.modules``.
 
-   config = LMCacheEngineConfig.from_defaults(
-       enable_remote_lmcache_store=True,
-       pd_role="sender",
-       remote_url="mooncakestore://metadata",
-   )
-   config.validate()
-   assert config.store_async_max_queue_size == 2
+Build and development
+---------------------
 
-The plugin no longer regenerates the config class or repairs already imported
-references. The canonical ``update_config_from_env()`` retains validation;
-factory readers retain their existing parsing API, so callers still invoke
-``validate()`` as appropriate. No cache key, payload, transport protocol or
-recovery algorithm changes in this batch.
+Pair ``lmcache==0.4.3+ascend.p3`` with ``vllm==0.18.0+ascend.p3`` from the
+same delivery. The historical helper filename remains::
 
-Packaging and development
--------------------------
-
-Pair ``lmcache==0.4.3+ascend.p3`` with ``vllm==0.18.0+ascend.p3`` from the same
-delivery. The existing ``p1_dev.py`` interfaces remain available::
-
-   python -B p1_dev.py editable --isolated-env --output /path/to/new-report
+   python -B p1_dev.py doctor --output /path/to/new-doctor.json
+   python -B p1_dev.py editable --isolated-env --output /path/to/new-editable
    python -B p1_dev.py verify --mode editable --output /path/to/new-paths.json
 
-Use a dedicated prepared environment, not the retained P2 runtime. The flag
-does not create isolation or bypass conflicting-version checks. First install
-compiles native artifacts; existing Python edits require process restart,
-while new files or native/dependency/resource changes require reinstallation.
-Keep the source checkout and strict editable link/native directories in place.
-Run installed-package validation outside the source checkout. Detailed paired
-commands and manifest are in the workspace ``design/p3/`` directory.
+Use a dedicated prepared environment, not the retained P2 service environment.
+The isolation flag does not create an environment or waive conflicting
+distributions. First install compiles native artifacts. Restart processes
+after Python edits; reinstall after new/moved files, native code, dependencies
+or resources change. Preserve the source, strict link tree and retained native
+build directory. Ordinary wheels and independent sdist rebuilds remain
+required acceptance artifacts.
 
-Remaining work and validation
---------------------------------
+Run installed checks outside source checkouts with no source PYTHONPATH::
 
-P3-01 is **not** full LMCache native integration. Engine, NPU connector,
-extension/IPC/transport ownership and remaining runtime/install patches still
-await migration. ``lmcache_ascend`` remains an internal package in this batch;
-do not import it merely to configure LMCache, or claim import-order independence
-for the complete runtime yet. Old PD/P2P layerwise restrictions remain.
+   python -B /path/to/LMCache/tools/p3_runtime_smoke.py --output /new/report
 
-Configuration and packaging host tests do not compile or install native code.
-ABI, NPU, CPU KV offload, cross-instance cache, 2P2D, checkpoint/RemoteFill and
-recovery acceptance remains pending. P4 pruning has not started. Keep paired
-P2/P3 artifacts, input/config identities, reports and cache namespaces separate
-within the unified validation campaign.
+This checks import orders, spawn, native identities and absence of global
+CUDA API/constructor replacement. Optional ``--npu`` tests a small registered
+host-memory copy on an explicitly selected idle test NPU, not model inference.
+
+Serving configuration migration
+-------------------------------
+
+The recommended vLLM entry is the built-in ``LMCacheConnectorV1``; remove the
+old ``kv_connector_module_path`` pointing at the retired package. A custom
+loader can instead select ``LMCacheConnectorV1Dynamic`` from
+``lmcache.integration.vllm.lmcache_connector_v1``. Keep engine IDs, roles,
+transport, TP/DP, DSA/MTP and cache settings unchanged.
+
+Validation boundary
+-------------------
+
+The workspace ``design/p3/intranet-validation.md`` provides exact paired
+build/install commands and the joint P2/P3 matrix. Preserve CPU KV offload,
+cross-instance cache, destination sealing/first prepared load, checkpoint,
+RemoteFill cancellation/timeouts and paired restart. Old PD/P2P layerwise
+restrictions are unchanged.
+
+Host tests and normalized method comparisons do not establish ABI, IPC/NPU,
+GLM-5.2 2P2D or performance correctness. P4 broad device/model pruning remains
+separate. The previously unimplemented Ascend multiprocess GPU cache server
+and non-target CacheBlend models are not new supported entry points. Keep
+P2/P3 environments, reports and cache namespaces separate.

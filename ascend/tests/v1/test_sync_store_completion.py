@@ -11,11 +11,11 @@ import pytest
 pytest.importorskip("lmcache")
 
 # First Party
-from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine
+from lmcache.v1.cache_engine import LMCacheEngine
 
 
-def _make_engine(timeout: float = 0.01) -> AscendLMCacheEngine:
-    engine = object.__new__(AscendLMCacheEngine)
+def _make_engine(timeout: float = 0.01) -> LMCacheEngine:
+    engine = object.__new__(LMCacheEngine)
     engine.is_store_async = False
     engine._require_store_completion = False
     engine.config = SimpleNamespace(blocking_timeout_secs=timeout)

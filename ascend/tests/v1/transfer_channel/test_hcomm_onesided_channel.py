@@ -22,8 +22,8 @@ import pytest
 import torch
 
 # First Party
-from lmcache_ascend import _build_info
-from lmcache_ascend.v1.transfer_channel import CreateTransferChannel
+from lmcache import _build_info
+from lmcache.v1.transfer_channel import CreateTransferChannel
 
 _cann_ver = _build_info.cann_version_tuple()
 pytestmark = pytest.mark.skipif(

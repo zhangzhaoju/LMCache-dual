@@ -120,7 +120,7 @@ def test_cached_original_boundary_needs_no_allocation(key_types, group):
     use_real_keys(engine, key_types)
     cls = implementation(
         "lmcache_ascend/v1/cache_engine.py",
-        "AscendLMCacheEngine",
+        "LMCacheEngine",
         {"get_checkpoint_prefix", "load_checkpoint_prefix"},
         object,
     )
@@ -178,7 +178,7 @@ def test_page_source_selection_and_failure_cleanup(
         "lmcache_ascend/v1/cache_engine.py"
         if backend == "ascend"
         else "../../LMCache/lmcache/v1/cache_engine.py",
-        "AscendLMCacheEngine" if backend == "ascend" else "LMCacheEngine",
+        "LMCacheEngine" if backend == "ascend" else "LMCacheEngine",
         {"_resolve_shared_rank0_layer_pages"},
         object,
         serving_perf_enabled=lambda: False,

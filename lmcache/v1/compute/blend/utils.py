@@ -7,14 +7,14 @@ from torch import nn
 
 # First Party
 from lmcache.logging import init_logger
-from lmcache.v1.compute.blend.blender import LMCBlender
+from lmcache.v1.compute.npu_blend.blender import LMCBlender
 from lmcache.v1.compute.models.utils import VLLMModelTracker
 
 if TYPE_CHECKING:
     # First Party
     from lmcache.v1.cache_engine import LMCacheEngine
     from lmcache.v1.config import LMCacheEngineConfig
-    from lmcache.v1.gpu_connector import GPUConnectorInterface
+    from lmcache.v1.device_connector import DeviceConnectorInterface
 
 logger = init_logger(__name__)
 
@@ -27,7 +27,7 @@ class LMCBlenderBuilder:
         cls,
         instance_id: str,
         cache_engine: "LMCacheEngine",
-        gpu_connector: "GPUConnectorInterface",
+        gpu_connector: "DeviceConnectorInterface",
         config: "LMCacheEngineConfig",
     ):
         """

@@ -22,8 +22,8 @@ WORKSPACE = ROOT.parents[1]
 @pytest.fixture
 def api(monkeypatch):
     for name in (
-        "lmcache_ascend",
-        "lmcache_ascend.v1",
+        "lmcache",
+        "lmcache.v1",
         "lmcache",
         "lmcache.integration",
         "lmcache.integration.vllm",
@@ -51,7 +51,7 @@ def api(monkeypatch):
         WORKSPACE / "LMCache/lmcache/integration/vllm/preemption_checkpoint.py",
     )
     load(
-        "lmcache_ascend.v1.local_checkpoint",
+        "lmcache.v1.local_checkpoint",
         ROOT / "lmcache_ascend/v1/local_checkpoint.py",
     )
     worker = load(
@@ -332,8 +332,8 @@ def test_partial_allocation_preserves_completed_pairs(api, monkeypatch, failed_g
         return original(group, length, caches)
 
     engine.allocate_checkpoint_fragment = allocate
-    engine.reclaim_checkpoint_capacity = (
-        lambda n, g: reclaims.append((n, set(g))) or False
+    engine.reclaim_checkpoint_capacity = lambda n, g: (
+        reclaims.append((n, set(g))) or False
     )
     store, _, engine = start_capture(api, monkeypatch, engine)
     result = store.poll()[0]

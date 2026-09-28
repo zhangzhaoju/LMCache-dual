@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Benchmark sparse decode cold bootstrap metadata and page-first retrieval.
 
-This benchmark drives ``AscendLMCacheEngine.retrieve_layer_head_token_wise``
+This benchmark drives ``LMCacheEngine.retrieve_layer_head_token_wise``
 through the same cold generator protocol used by the vLLM adapter:
 
 1. build token/chunk/layer metadata;
@@ -53,7 +53,7 @@ from lmcache.utils import CacheEngineKey
 from lmcache.v1.gpu_connector.gpu_connectors import (
     VLLMPagedMemLayerwiseGPUConnector,
 )
-from lmcache.v1.gpu_connector.sparse import build_prepared_sparse_source
+from lmcache.v1.device_connector.sparse import build_prepared_sparse_source
 from lmcache.v1.memory_management import MemoryFormat, TensorMemoryAllocator
 from lmcache.v1.metadata import LMCacheMetadata
 from lmcache.v1.mooncake_layout import mooncake_page_key
@@ -67,7 +67,7 @@ from lmcache.v1.storage_backend.local_cpu_backend import (
     LocalCPUPrefixGetResult,
 )
 from lmcache.v1.token_database import ChunkedTokenDatabase
-from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine
+from lmcache.v1.cache_engine import LMCacheEngine
 
 
 GB = 1_000_000_000
@@ -161,9 +161,10 @@ def validate_evidence_manifest(manifest: dict[str, Any]) -> None:
         raise ValueError(f"evidence manifest missing fields: {', '.join(missing)}")
     if manifest["tp"] != 8 or manifest["dp"] != 2:
         raise ValueError("evidence contract requires TP8 and DP2")
-    if not isinstance(manifest["outputs"], dict) or "token_ids_sha256" not in manifest[
-        "outputs"
-    ]:
+    if (
+        not isinstance(manifest["outputs"], dict)
+        or "token_ids_sha256" not in manifest["outputs"]
+    ):
         raise ValueError("evidence manifest outputs must include token_ids_sha256")
 
 
@@ -206,9 +207,7 @@ def filter_request_timeline(
 
     stages = {
         stage: sum(
-            elapsed(event)
-            for event in selected
-            if event.get("event") in event_names
+            elapsed(event) for event in selected if event.get("event") in event_names
         )
         for stage, event_names in _EVIDENCE_STAGE_EVENTS.items()
     }
@@ -223,14 +222,10 @@ def filter_request_timeline(
         if event.get("event") in {"mooncake_page_get", "mooncake_legacy_get"}
     )
     mooncake_ms = sum(
-        elapsed(event)
-        for event in selected
-        if event.get("event") in _MOONCAKE_EVENTS
+        elapsed(event) for event in selected if event.get("event") in _MOONCAKE_EVENTS
     )
     resolver_wall_ms = sum(
-        elapsed(event)
-        for event in selected
-        if event.get("event") == "remote_resolver"
+        elapsed(event) for event in selected if event.get("event") == "remote_resolver"
     )
     stages["resolver_cpu_ms"] = max(0.0, resolver_wall_ms - mooncake_ms)
     worker_complete = [
@@ -351,8 +346,7 @@ def build_evidence_contract(
         },
         "filtered_timeline_schema": {
             "one_req_id": True,
-            "exclusive_stages_ms": list(_EVIDENCE_STAGE_EVENTS)
-            + ["resolver_cpu_ms"],
+            "exclusive_stages_ms": list(_EVIDENCE_STAGE_EVENTS) + ["resolver_cpu_ms"],
             "mooncake_rule": (
                 "Mooncake leaf time is reported once; resolver_cpu_ms subtracts "
                 "nested Mooncake and critical_total_ms is the outer measured wall"
@@ -360,9 +354,10 @@ def build_evidence_contract(
         },
         "commands": commands,
     }
+
+
 _RESOLVER_STAGE_FIELDS = {
-    stage: f"resolver_{stage}_s"
-    for stage in (*_RESOLVER_EMITTED_STAGES, "validation")
+    stage: f"resolver_{stage}_s" for stage in (*_RESOLVER_EMITTED_STAGES, "validation")
 }
 _RESOLVER_CPU_STAGES = (
     "windows",
@@ -533,8 +528,7 @@ def _record_resolver_stage(
 
 def _resolver_cpu_attributed_s(stats: StageStats) -> float:
     return sum(
-        getattr(stats, _RESOLVER_STAGE_FIELDS[stage])
-        for stage in _RESOLVER_CPU_STAGES
+        getattr(stats, _RESOLVER_STAGE_FIELDS[stage]) for stage in _RESOLVER_CPU_STAGES
     )
 
 
@@ -932,12 +926,10 @@ class SyntheticPageFirstStorageManager:
                 if self.object_mode == "production" and page_bytes != (
                     self.chunk_size * self.bytes_per_token
                 ):
-                    obj = (
-                        MooncakestoreConnector._reshape_partial_chunk_with_token_size(
-                            obj,
-                            page_bytes,
-                            self.bytes_per_token,
-                        )
+                    obj = MooncakestoreConnector._reshape_partial_chunk_with_token_size(
+                        obj,
+                        page_bytes,
+                        self.bytes_per_token,
                     )
                 results[index] = obj
             self.stats.remote_scatter_s += time.perf_counter() - scatter_started
@@ -963,9 +955,7 @@ class SyntheticPageFirstStorageManager:
             raise RuntimeError("layer-merged matrix requires --object-mode production")
         assert self.allocator_connector is not None
         started = time.perf_counter()
-        shapes, dtypes, fmt, _ = self.allocator_connector._metadata_for_raw_key(
-            keys[0]
-        )
+        shapes, dtypes, fmt, _ = self.allocator_connector._metadata_for_raw_key(keys[0])
         pages = self.local_backend.batched_allocate_layer_pages(
             shapes,
             dtypes,
@@ -1139,7 +1129,7 @@ def _make_engine(
     kv_group: int,
     prefix_mode: str,
 ) -> tuple[
-    AscendLMCacheEngine,
+    LMCacheEngine,
     SyntheticPageFirstStorageManager,
     dict[str, list],
 ]:
@@ -1201,7 +1191,7 @@ def _make_engine(
         getattr(args, "dense_consumer_layer_ms", 0.0),
     )
 
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.num_layers = args.num_layers
     engine.use_layerwise = True
     engine.enable_shared_cpu_cache = True
@@ -1221,9 +1211,7 @@ def _make_engine(
         on_retrieve_finished=lambda _request, _tokens: None,
     )
     engine._shared_cpu_request_leases = {}
-    engine._shared_page_first_location_plan = (
-        lambda keys: ["RemoteBackend"] * len(keys)
-    )
+    engine._shared_page_first_location_plan = lambda keys: ["RemoteBackend"] * len(keys)
     engine.config = SimpleNamespace(
         chunk_size=args.chunk_size,
         enable_shared_cpu_cache=True,
@@ -1248,12 +1236,7 @@ def _make_engine(
         engine._validate_rank0_shared_mem_obj = lambda _obj, **_kwargs: None
     engine._shared_cpu_estimated_physical_chunk_bytes = (
         lambda _kv_group, num_tokens=None: (
-            (
-                (num_tokens or args.chunk_size) * bytes_per_token
-                + 4095
-            )
-            // 4096
-            * 4096
+            ((num_tokens or args.chunk_size) * bytes_per_token + 4095) // 4096 * 4096
         )
     )
     engine.shared_cpu_rank0_request_object_ids = lambda _req_id, _kv_group: set()
@@ -1390,16 +1373,12 @@ def run_once(
     stats.resolver_cpu_s = max(0.0, stats.resolver_s - stats.remote_s)
     resolver_attributed_s = _resolver_cpu_attributed_s(stats)
     if resolver_attributed_s > stats.resolver_cpu_s + tolerance_s:
-        raise AssertionError(
-            "resolver sub-stage timings exceed resolver CPU time"
-        )
+        raise AssertionError("resolver sub-stage timings exceed resolver CPU time")
     stats.resolver_unattributed_s = max(
         0.0,
         stats.resolver_cpu_s - resolver_attributed_s,
     )
-    stats.cache_append_cpu_s = max(
-        0.0, stats.cache_append_s - stats.pointer_s
-    )
+    stats.cache_append_cpu_s = max(0.0, stats.cache_append_s - stats.pointer_s)
     stats.prime_other_s = max(
         0.0,
         stats.cold_prime_s
@@ -1476,9 +1455,7 @@ def run_once(
             f"!= {expected_memory_objects}"
         )
     if args.object_mode == "production":
-        memory_objs = [
-            obj for layer in caches["cached_memory_objs"] for obj in layer
-        ]
+        memory_objs = [obj for layer in caches["cached_memory_objs"] for obj in layer]
         if any(caches["cached_tensors"]) or any(
             not obj.is_pinned for obj in memory_objs
         ):
@@ -1493,8 +1470,7 @@ def run_once(
         )
     if stats.broadcast_envelopes != args.num_layers:
         raise AssertionError(
-            f"envelope count mismatch: {stats.broadcast_envelopes} "
-            f"!= {args.num_layers}"
+            f"envelope count mismatch: {stats.broadcast_envelopes} != {args.num_layers}"
         )
     storage_manager.close()
     return stats
@@ -1515,9 +1491,7 @@ def _run_pair_once(
     chunk_plan_mode: str,
 ) -> dict[int, StageStats]:
     tokens = list(range(args.num_tokens))
-    shared_state: Optional[dict[str, Any]] = (
-        {} if chunk_plan_mode == "reuse" else None
-    )
+    shared_state: Optional[dict[str, Any]] = {} if chunk_plan_mode == "reuse" else None
     return {
         kv_group: run_once(
             args,
@@ -1560,8 +1534,7 @@ def run_pair_cases(
             results.append(
                 BenchmarkResult(
                     name=(
-                        f"g{kv_group}_{prefix_mode.replace('-', '_')}_"
-                        f"{chunk_plan_mode}"
+                        f"g{kv_group}_{prefix_mode.replace('-', '_')}_{chunk_plan_mode}"
                     ),
                     prefix_mode=prefix_mode,
                     chunk_plan_mode=chunk_plan_mode,
@@ -1590,7 +1563,7 @@ def _run_cold_compact_protocol_once(
     token_mask = torch.ones(args.num_tokens, dtype=torch.bool)
     request_id = f"ab-{'on' if enabled else 'off'}"
     shared_state: dict[str, Any] = {}
-    engines: dict[int, AscendLMCacheEngine] = {}
+    engines: dict[int, LMCacheEngine] = {}
     stores: list[SyntheticPageFirstStorageManager] = []
     retrievers = []
     caches_by_group: dict[int, dict[str, list]] = {}
@@ -1645,9 +1618,7 @@ def _run_cold_compact_protocol_once(
             req_id=request_id,
             slot_mapping=torch.arange(args.num_tokens, dtype=torch.long),
             sync=True,
-            shared_cpu_request_preflight_state=(
-                shared_state if not enabled else None
-            ),
+            shared_cpu_request_preflight_state=(shared_state if not enabled else None),
             **options,
         )
 
@@ -1706,12 +1677,8 @@ def _run_cold_compact_protocol_once(
         ):
             raise AssertionError("cold-start protocol retrieved an incomplete mask")
         if not enabled and any(
-            len(caches_by_group[group]["cached_memory_objs"])
-            != args.num_layers
-            or any(
-                not layer
-                for layer in caches_by_group[group]["cached_memory_objs"]
-            )
+            len(caches_by_group[group]["cached_memory_objs"]) != args.num_layers
+            or any(not layer for layer in caches_by_group[group]["cached_memory_objs"])
             for group in (0, 1)
         ):
             raise AssertionError("dense prefix did not retain request-owned cache")
@@ -1812,9 +1779,7 @@ def _cold_compact_variant(
             else ["dense_consume_latent", "dense_consume_indexer", "resume"]
         ),
         consumer_modes=(
-            {0: "materialize_only", 1: "dense"}
-            if enabled
-            else {0: "dense", 1: "dense"}
+            {0: "materialize_only", 1: "dense"} if enabled else {0: "dense", 1: "dense"}
         ),
         lookup_metadata_s=lookup_metadata_s,
         mooncake_s=mooncake_s,
@@ -1900,9 +1865,7 @@ def build_cold_compact_ab_report(
         comparison={
             "delta_s": median_delta_s,
             "speedup": statistics.median(item["speedup"] for item in paired),
-            "slowdown": statistics.median(
-                1 / item["speedup"] for item in paired
-            ),
+            "slowdown": statistics.median(1 / item["speedup"] for item in paired),
         },
         samples=paired,
     )
@@ -1946,8 +1909,7 @@ def run_layer_merged_cold_compact_matrix(args: Namespace) -> dict[str, Any]:
     """Run the four feature combinations through the existing protocols."""
     cases = [(False, False), (True, False), (False, True), (True, True)]
     samples: dict[str, list[ColdCompactProtocolSample]] = {
-        f"merged_{int(merged)}_compact_{int(compact)}": []
-        for merged, compact in cases
+        f"merged_{int(merged)}_compact_{int(compact)}": [] for merged, compact in cases
     }
     for repeat in range(args.warmup + args.repeats):
         order = cases[repeat % len(cases) :] + cases[: repeat % len(cases)]
@@ -1956,9 +1918,7 @@ def run_layer_merged_cold_compact_matrix(args: Namespace) -> dict[str, Any]:
                 args, enabled=compact, layer_merged=merged
             )
             if repeat >= args.warmup:
-                samples[f"merged_{int(merged)}_compact_{int(compact)}"].append(
-                    sample
-                )
+                samples[f"merged_{int(merged)}_compact_{int(compact)}"].append(sample)
     variants = {}
     for name, case_samples in samples.items():
         medians = {
@@ -2021,9 +1981,7 @@ def _ms(seconds: float) -> float:
 def print_results(results: list[BenchmarkResult]) -> None:
     """Print timing and topology summaries for all measured configurations."""
     print("\nCold bootstrap wall time (median ms; prime is the blocking first next())")
-    print(
-        f"{'case':38} {'prime':>9} {'cold total':>11} {'warm':>9}"
-    )
+    print(f"{'case':38} {'prime':>9} {'cold total':>11} {'warm':>9}")
     for result in results:
         stats = result.median
         print(
@@ -2056,9 +2014,7 @@ def print_results(results: list[BenchmarkResult]) -> None:
             f"{_ms(stats.handle_s):9.3f}"
         )
 
-    print(
-        "\nFirst-yield attribution (median ms; remote is nested inside resolver)"
-    )
+    print("\nFirst-yield attribution (median ms; remote is nested inside resolver)")
     print(
         f"{'case':38} {'prime':>9} {'metadata':>10} {'probe':>9} "
         f"{'capacity':>10} {'resolver':>10} {'remote':>9} "
@@ -2199,8 +2155,7 @@ def print_results(results: list[BenchmarkResult]) -> None:
             for kv_group in (0, 1)
         ]
         optimized = [
-            result_map.get((kv_group, prefix_mode, "reuse"))
-            for kv_group in (0, 1)
+            result_map.get((kv_group, prefix_mode, "reuse")) for kv_group in (0, 1)
         ]
         if any(result is None for result in baseline + optimized):
             continue
@@ -2418,9 +2373,7 @@ def parse_args() -> Namespace:
     ):
         parser.error("--prefix-modes must contain per-layer and/or batched")
     args.chunk_plan_modes = [
-        value.strip()
-        for value in args.chunk_plan_modes.split(",")
-        if value.strip()
+        value.strip() for value in args.chunk_plan_modes.split(",") if value.strip()
     ]
     valid_plan_modes = {"independent", "reuse"}
     if not args.chunk_plan_modes or any(
@@ -2442,9 +2395,7 @@ def parse_args() -> Namespace:
                 "feature matrix requires --kv-groups 0,1 --object-mode production"
             )
     elif args.matrix_output_json is not None:
-        parser.error(
-            "--matrix-output-json requires --layer-merged-cold-compact-matrix"
-        )
+        parser.error("--matrix-output-json requires --layer-merged-cold-compact-matrix")
     return args
 
 
@@ -2452,9 +2403,7 @@ def main() -> None:
     """Run the requested cold-bootstrap benchmark matrix."""
     args = parse_args()
     if getattr(args, "evidence_output_json", None) is not None:
-        manifest = json.loads(
-            args.evidence_manifest_json.read_text(encoding="utf-8")
-        )
+        manifest = json.loads(args.evidence_manifest_json.read_text(encoding="utf-8"))
         report = build_evidence_contract(
             manifest,
             args.production_launch_command,

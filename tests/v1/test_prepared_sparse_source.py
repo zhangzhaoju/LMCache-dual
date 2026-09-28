@@ -9,7 +9,7 @@ import pytest
 import torch
 
 # First Party
-from lmcache.v1.gpu_connector.sparse import build_prepared_sparse_source
+from lmcache.v1.device_connector.sparse import build_prepared_sparse_source
 from lmcache.v1.memory_management import MemoryObj
 
 

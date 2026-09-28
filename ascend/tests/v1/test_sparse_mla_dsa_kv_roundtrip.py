@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Store/retrieve roundtrip via sparse_mla_dsa_batched_direct_kv_transfer."""
+
 from __future__ import annotations
 
 # Standard
@@ -43,7 +44,7 @@ from load_benchmark_utils import (  # noqa: E402
     run_all_direct_layers,
     run_direct_load_layer,
 )
-from lmcache_ascend.v1.npu_connector.utils import (  # noqa: E402
+from lmcache.v1.npu_connector.utils import (  # noqa: E402
     batched_fused_sparse_single_layer_kv_transfer,
     prepare_sparse_direct_destination_state,
     sparse_mla_dsa_batched_direct_kv_transfer_prepared,
@@ -157,9 +158,7 @@ def _check_compact_scratch_from_cpu_chunks(
             )
         if len(mismatches) >= 8:
             break
-    assert not mismatches, (
-        f"compact scratch direct sparse load mismatch: {mismatches}"
-    )
+    assert not mismatches, f"compact scratch direct sparse load mismatch: {mismatches}"
 
 
 def _check_compact_index_from_cpu_chunks(
@@ -266,24 +265,33 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
                 dst_dir = harness.dst_direct[layer_id]
                 dst_fast = harness.dst_direct_fast[layer_id]
 
-                src_k = src_layer[0].reshape(
-                    -1, num_kv_heads, kv_lora_rank
-                ).detach().cpu()
-                dst_dir_k = dst_dir[0].reshape(
-                    -1, num_kv_heads, kv_lora_rank
-                ).detach().cpu()
-                dst_fast_k = dst_fast[0].reshape(
-                    -1, num_kv_heads, kv_lora_rank
-                ).detach().cpu()
-                src_v = src_layer[1].reshape(
-                    -1, num_kv_heads, qk_rope_head_dim
-                ).detach().cpu()
-                dst_dir_v = dst_dir[1].reshape(
-                    -1, num_kv_heads, qk_rope_head_dim
-                ).detach().cpu()
-                dst_fast_v = dst_fast[1].reshape(
-                    -1, num_kv_heads, qk_rope_head_dim
-                ).detach().cpu()
+                src_k = (
+                    src_layer[0].reshape(-1, num_kv_heads, kv_lora_rank).detach().cpu()
+                )
+                dst_dir_k = (
+                    dst_dir[0].reshape(-1, num_kv_heads, kv_lora_rank).detach().cpu()
+                )
+                dst_fast_k = (
+                    dst_fast[0].reshape(-1, num_kv_heads, kv_lora_rank).detach().cpu()
+                )
+                src_v = (
+                    src_layer[1]
+                    .reshape(-1, num_kv_heads, qk_rope_head_dim)
+                    .detach()
+                    .cpu()
+                )
+                dst_dir_v = (
+                    dst_dir[1]
+                    .reshape(-1, num_kv_heads, qk_rope_head_dim)
+                    .detach()
+                    .cpu()
+                )
+                dst_fast_v = (
+                    dst_fast[1]
+                    .reshape(-1, num_kv_heads, qk_rope_head_dim)
+                    .detach()
+                    .cpu()
+                )
 
                 src_dsa = dst_dir_dsa = dst_fast_dsa = None
                 if kv_format == KV_FORMAT_DSA:
@@ -302,13 +310,9 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
                             f"direct L{layer_id}P{pi}slot{slot} V mismatch"
                         )
                     if not torch.equal(src_k[slot], dst_fast_k[slot]):
-                        mismatches.append(
-                            f"fast L{layer_id}P{pi}slot{slot} K mismatch"
-                        )
+                        mismatches.append(f"fast L{layer_id}P{pi}slot{slot} K mismatch")
                     if not torch.equal(src_v[slot], dst_fast_v[slot]):
-                        mismatches.append(
-                            f"fast L{layer_id}P{pi}slot{slot} V mismatch"
-                        )
+                        mismatches.append(f"fast L{layer_id}P{pi}slot{slot} V mismatch")
                     if src_dsa is not None:
                         if not torch.equal(src_dsa[slot], dst_dir_dsa[slot]):
                             mismatches.append(
@@ -368,9 +372,7 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
             _fill_stacked_chunks_with_token_pattern(chunks, dtype=dtype)
 
             selected = _tail_heavy_selected_tokens(total_tokens, num_selected)
-            selected_npu = torch.tensor(
-                selected, dtype=torch.int32, device=device
-            )
+            selected_npu = torch.tensor(selected, dtype=torch.int32, device=device)
             scratch_base_block = 5
             scratch_base_slot = scratch_base_block * block_size
             scratch_slots_cpu = list(
@@ -516,9 +518,7 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
             _fill_stacked_chunks_with_token_pattern(chunks, dtype=dtype)
 
             selected = _tail_heavy_selected_tokens(total_tokens, num_selected)
-            selected_npu = torch.tensor(
-                selected, dtype=torch.int32, device=device
-            )
+            selected_npu = torch.tensor(selected, dtype=torch.int32, device=device)
             scratch_base_block = 5
             scratch_base_slot = scratch_base_block * block_size
             scratch_slots_cpu = list(
@@ -710,9 +710,7 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
             for row, count in enumerate(row_counts):
                 row_start = row * row_width
                 valid_positions.extend(range(row_start, row_start + count))
-                padded_positions.extend(
-                    range(row_start + count, row_start + row_width)
-                )
+                padded_positions.extend(range(row_start + count, row_start + row_width))
             valid_positions_npu = torch.tensor(
                 valid_positions,
                 dtype=torch.long,
@@ -891,14 +889,12 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
                         count = base_count
                     counts_cpu[step, layer_id] = count
                     selected_cpu[step, layer_id, :count] = (
-                        positions[:count] * 137
-                        + step * 211
-                        + layer_id * 43
-                    ).remainder(frontier).to(torch.int32)
+                        (positions[:count] * 137 + step * 211 + layer_id * 43)
+                        .remainder(frontier)
+                        .to(torch.int32)
+                    )
                     target_cpu[step, layer_id] = (
-                        positions * 127
-                        + step * 193
-                        + layer_id * 47
+                        positions * 127 + step * 193 + layer_id * 47
                     ).remainder(row_width)
 
             selected_by_launch = selected_cpu.to(device=device)
@@ -995,9 +991,7 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
                 for step in range(num_steps):
                     count = int(counts_cpu[step, layer_id])
                     slots = target_cpu[step, layer_id, :count]
-                    last_token_by_slot[slots] = selected_cpu[
-                        step, layer_id, :count
-                    ]
+                    last_token_by_slot[slots] = selected_cpu[step, layer_id, :count]
                 written_slots = torch.nonzero(
                     last_token_by_slot >= 0,
                     as_tuple=False,
@@ -1005,17 +999,12 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
                 chunks = source_chunks_by_layer[layer_id]
                 _check_compact_scratch_from_cpu_chunks(
                     chunks=chunks,
-                    selected=[
-                        int(last_token_by_slot[slot]) for slot in written_slots
-                    ],
+                    selected=[int(last_token_by_slot[slot]) for slot in written_slots],
                     dst_slots=[int(slot) for slot in written_slots],
                     dst_layer=destination_layers[layer_id],
                     chunk_size=chunk_size,
                     dims=dims,
-                    label=(
-                        "prepared-three-step "
-                        f"frontier={frontier} layer={layer_id}"
-                    ),
+                    label=(f"prepared-three-step frontier={frontier} layer={layer_id}"),
                 )
 
                 unwritten_slots = torch.nonzero(
@@ -1024,9 +1013,7 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
                 ).reshape(-1)
                 if unwritten_slots.numel():
                     for plane in destination_layers[layer_id]:
-                        plane_cpu = plane.reshape(
-                            -1, plane.shape[-1]
-                        ).detach().cpu()
+                        plane_cpu = plane.reshape(-1, plane.shape[-1]).detach().cpu()
                         unwritten = plane_cpu.index_select(0, unwritten_slots)
                         assert torch.all(unwritten == guard_value), (
                             "prepared sparse transfer consumed an invalid "
@@ -1080,9 +1067,7 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
                 num_selected=num_selected,
                 seed=123,
             )
-            selected_values = _tail_heavy_selected_tokens(
-                num_tokens, num_selected
-            )
+            selected_values = _tail_heavy_selected_tokens(num_tokens, num_selected)
             harness.selected_token_idx = torch.tensor(
                 selected_values,
                 device=harness.selected_token_idx.device,
@@ -1110,24 +1095,22 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
             src_layer = harness.src_kv_cache[0]
             dst_dir = harness.dst_direct[0]
             dst_fast = harness.dst_direct_fast[0]
-            src_k = src_layer[0].reshape(
-                -1, num_kv_heads, kv_lora_rank
-            ).detach().cpu()
-            src_v = src_layer[1].reshape(
-                -1, num_kv_heads, qk_rope_head_dim
-            ).detach().cpu()
-            dst_dir_k = dst_dir[0].reshape(
-                -1, num_kv_heads, kv_lora_rank
-            ).detach().cpu()
-            dst_dir_v = dst_dir[1].reshape(
-                -1, num_kv_heads, qk_rope_head_dim
-            ).detach().cpu()
-            dst_fast_k = dst_fast[0].reshape(
-                -1, num_kv_heads, kv_lora_rank
-            ).detach().cpu()
-            dst_fast_v = dst_fast[1].reshape(
-                -1, num_kv_heads, qk_rope_head_dim
-            ).detach().cpu()
+            src_k = src_layer[0].reshape(-1, num_kv_heads, kv_lora_rank).detach().cpu()
+            src_v = (
+                src_layer[1].reshape(-1, num_kv_heads, qk_rope_head_dim).detach().cpu()
+            )
+            dst_dir_k = (
+                dst_dir[0].reshape(-1, num_kv_heads, kv_lora_rank).detach().cpu()
+            )
+            dst_dir_v = (
+                dst_dir[1].reshape(-1, num_kv_heads, qk_rope_head_dim).detach().cpu()
+            )
+            dst_fast_k = (
+                dst_fast[0].reshape(-1, num_kv_heads, kv_lora_rank).detach().cpu()
+            )
+            dst_fast_v = (
+                dst_fast[1].reshape(-1, num_kv_heads, qk_rope_head_dim).detach().cpu()
+            )
 
             src_dsa = dst_dir_dsa = dst_fast_dsa = None
             if kv_format == KV_FORMAT_DSA:
@@ -1222,24 +1205,40 @@ class TestSparseMlaDsaStoreRetrieveRoundtrip:
             layer_ids = _sample_layer_ids(num_layers)
             mismatches: list[str] = []
             for layer_id in layer_ids:
-                dst_dir_k = harness.dst_direct[layer_id][0].reshape(
-                    -1, num_kv_heads, kv_lora_rank
-                ).detach().cpu()
-                dst_fast_k = harness.dst_direct_fast[layer_id][0].reshape(
-                    -1, num_kv_heads, kv_lora_rank
-                ).detach().cpu()
-                dst_dir_v = harness.dst_direct[layer_id][1].reshape(
-                    -1, num_kv_heads, qk_rope_head_dim
-                ).detach().cpu()
-                dst_fast_v = harness.dst_direct_fast[layer_id][1].reshape(
-                    -1, num_kv_heads, qk_rope_head_dim
-                ).detach().cpu()
+                dst_dir_k = (
+                    harness.dst_direct[layer_id][0]
+                    .reshape(-1, num_kv_heads, kv_lora_rank)
+                    .detach()
+                    .cpu()
+                )
+                dst_fast_k = (
+                    harness.dst_direct_fast[layer_id][0]
+                    .reshape(-1, num_kv_heads, kv_lora_rank)
+                    .detach()
+                    .cpu()
+                )
+                dst_dir_v = (
+                    harness.dst_direct[layer_id][1]
+                    .reshape(-1, num_kv_heads, qk_rope_head_dim)
+                    .detach()
+                    .cpu()
+                )
+                dst_fast_v = (
+                    harness.dst_direct_fast[layer_id][1]
+                    .reshape(-1, num_kv_heads, qk_rope_head_dim)
+                    .detach()
+                    .cpu()
+                )
                 for pi in packed_idx_to_check:
                     slot = int(slots[pi])
                     if not torch.equal(dst_dir_k[slot], dst_fast_k[slot]):
-                        mismatches.append(f"L{layer_id}P{pi}slot{slot} K direct/fast differ")
+                        mismatches.append(
+                            f"L{layer_id}P{pi}slot{slot} K direct/fast differ"
+                        )
                     if not torch.equal(dst_dir_v[slot], dst_fast_v[slot]):
-                        mismatches.append(f"L{layer_id}P{pi}slot{slot} V direct/fast differ")
+                        mismatches.append(
+                            f"L{layer_id}P{pi}slot{slot} V direct/fast differ"
+                        )
             assert not mismatches, (
                 f"direct vs fast disagree (first 8 of {len(mismatches)}): "
                 f"{mismatches[:8]}"
@@ -1316,7 +1315,9 @@ class TestDsaPopulateVsScatterIsolation:
             dsa_plane_start = num_lmc * (kH + vH)
             populate_mismatches: list[str] = []
             for t in range(num_tokens):
-                cpu_dsa_t = chunk0[dsa_plane_start + t * dsaH : dsa_plane_start + (t + 1) * dsaH]
+                cpu_dsa_t = chunk0[
+                    dsa_plane_start + t * dsaH : dsa_plane_start + (t + 1) * dsaH
+                ]
                 slot = int(slot_mapping_full[t])
                 if not torch.equal(src_dsa[slot], cpu_dsa_t):
                     populate_mismatches.append(f"token{t}slot{slot}")
@@ -1330,7 +1331,10 @@ class TestDsaPopulateVsScatterIsolation:
             scatter_mismatches: list[str] = []
             for pi, gtok in enumerate(selected):
                 local_t = gtok % chunk_size
-                cpu_dsa_t = chunk0[dsa_plane_start + local_t * dsaH : dsa_plane_start + (local_t + 1) * dsaH]
+                cpu_dsa_t = chunk0[
+                    dsa_plane_start + local_t * dsaH : dsa_plane_start
+                    + (local_t + 1) * dsaH
+                ]
                 slot = int(slots_packed[pi])
                 if not torch.equal(dst_dsa[slot], cpu_dsa_t):
                     scatter_mismatches.append(f"packed{pi}gtok{gtok}slot{slot}")

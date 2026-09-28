@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """P2P lookup operation handler"""
 
 # SPDX-License-Identifier: Apache-2.0

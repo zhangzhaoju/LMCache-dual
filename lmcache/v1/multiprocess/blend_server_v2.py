@@ -57,7 +57,7 @@ from lmcache.v1.distributed.config import (
     parse_args_to_config,
 )
 from lmcache.v1.distributed.storage_manager import PrefetchHandle
-from lmcache.v1.gpu_connector.gpu_ops import (
+from lmcache.v1.device_connector.memory_ops import (
     lmcache_memcpy_async_d2h,
     lmcache_memcpy_async_h2d,
 )

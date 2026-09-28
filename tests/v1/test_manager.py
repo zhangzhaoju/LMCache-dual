@@ -357,8 +357,8 @@ class TestLMCacheManagerShutdown:
         destroy_threads: list[int] = []
 
         with patch("lmcache.v1.manager.LMCacheEngineBuilder") as builder:
-            builder.destroy.side_effect = (
-                lambda _instance_id: destroy_threads.append(threading.get_ident())
+            builder.destroy.side_effect = lambda _instance_id: destroy_threads.append(
+                threading.get_ident()
             )
             manager.stop_services()
 
@@ -386,7 +386,7 @@ class TestLMCacheManagerHelpers:
         config = LMCacheEngineConfig.from_defaults()
         config.enable_pd = False
         # First Party
-        from lmcache.v1.gpu_connector.utils import need_gpu_interm_buffer
+        from lmcache.v1.device_connector.utils import need_gpu_interm_buffer
 
         assert need_gpu_interm_buffer(config) is True
 

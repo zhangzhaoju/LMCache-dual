@@ -163,8 +163,7 @@ class TokenDatabase(metaclass=abc.ABCMeta):
                 raise TypeError("token hash function returned an empty byte digest")
             return bytes, len(probe)
         raise TypeError(
-            "token hash function must return int or bytes, got "
-            f"{type(probe).__name__}"
+            f"token hash function must return int or bytes, got {type(probe).__name__}"
         )
 
     def _get_vllm_hash_func(self, hash_algorithm: str):
@@ -279,7 +278,9 @@ class TokenDatabase(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def _make_key_by_hash(
-        self, chunk_hash: int, request_configs: Optional[dict] = None,
+        self,
+        chunk_hash: int,
+        request_configs: Optional[dict] = None,
         kv_group: int = 0,
         valid_tokens: Optional[int] = None,
     ):
@@ -297,9 +298,7 @@ class TokenDatabase(metaclass=abc.ABCMeta):
             )
         if self.mooncake_payload_layout is not None:
             request_configs = dict(request_configs or {})
-            request_configs[MOONCAKE_PAYLOAD_LAYOUT_TAG] = (
-                self.mooncake_payload_layout
-            )
+            request_configs[MOONCAKE_PAYLOAD_LAYOUT_TAG] = self.mooncake_payload_layout
             chunk_size = int(getattr(config, "chunk_size", 0))
             if valid_tokens is not None and valid_tokens != chunk_size:
                 if not 0 < valid_tokens < chunk_size:
@@ -347,7 +346,7 @@ class TokenDatabase(metaclass=abc.ABCMeta):
         self,
         tokens: Union[torch.Tensor, List[int]],
         prefix_hash: Optional[int] = None,
-        extra_keys: Optional[list[Any]] = None,
+        extra_keys: Optional[List[Any]] = None,
     ) -> int:
         if isinstance(tokens, torch.Tensor):
             tokens_tuple = tuple(tokens.cpu().tolist())
@@ -359,15 +358,12 @@ class TokenDatabase(metaclass=abc.ABCMeta):
         # Ignore extra keys for now
         # Extra keys are for multi-modal inputs and
         # request specific metadata (e.g., LoRA ID).
-        # Use default values for None to maintain a fixed tuple structure for hashing.
-
-        # Use helper to canonicalize inputs to ensure consistent hashing
-        # This replaces the logic that was causing inconsistency
-        canon_prefix, canon_tokens, canon_extra = self._canonicalize_hash_inputs(
-            prefix_hash, tokens_tuple, extra_keys
-        )
-
-        return self.hash_func((canon_prefix, canon_tokens, canon_extra))
+        # NOTE: Pre python3.12 and for operating system that has ASLR turned on,
+        #       hashing none will give inconsistent values across workers
+        #       https://github.com/python/cpython/issues/99540
+        if extra_keys is None:
+            return self.hash_func((prefix_hash, tokens_tuple))
+        return self.hash_func((prefix_hash, tokens_tuple, extra_keys))
 
 
 class ChunkedTokenDatabase(TokenDatabase):
@@ -631,7 +627,6 @@ class SegmentTokenDatabase(TokenDatabase):
         mask: Optional[torch.Tensor] = None,
         make_key: bool = True,
         request_configs: Optional[dict] = None,
-        kv_group: int = 0,
     ) -> Iterable[ProcessTokensResult]:
         """Process the tokens and return the corresponding cache engine keys.
 
@@ -669,6 +664,21 @@ class SegmentTokenDatabase(TokenDatabase):
                 num_falses = mask.numel() - mask.long().sum().item()
             else:
                 num_falses = 0
+
+            # NOTE(niming): Boundary case - return gracefully without raising exceptions
+            if len(tokens) == 0:
+                logger.warning(
+                    f"Process aborted: 'tokens' is empty. (num_falses={num_falses})"
+                )
+                return
+
+            if num_falses == len(tokens):
+                logger.warning(
+                    f"Full mask detected: All {len(tokens)} tokens are masked as False. "
+                    f"Nothing to process for this request."
+                )
+                return
+
             assert num_falses < len(tokens), (
                 "The number of Falses in the mask shouldn't "
                 "be less than the length of tokens."
@@ -688,9 +698,7 @@ class SegmentTokenDatabase(TokenDatabase):
                             start_idx,
                             end_idx,
                             self._make_key_by_hash(
-                                self._hash_tokens(token_chunk),
-                                request_configs,
-                                kv_group=kv_group,
+                                self._hash_tokens(token_chunk), request_configs
                             ),
                         )
                     else:
@@ -707,9 +715,7 @@ class SegmentTokenDatabase(TokenDatabase):
                     yield (
                         start_idx,
                         end_idx,
-                        self._make_key_by_hash(
-                            hash_val, request_configs, kv_group=kv_group
-                        ),
+                        self._make_key_by_hash(hash_val, request_configs),
                     )
                 else:
                     yield start_idx, end_idx, hash_val

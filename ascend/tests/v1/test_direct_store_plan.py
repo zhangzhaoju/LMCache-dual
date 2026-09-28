@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Source ownership contracts for pure direct-store window planning."""
+
 from types import SimpleNamespace
 
 import pytest
 
-from lmcache_ascend.v1.direct_store_plan import (
+from lmcache.v1.direct_store_plan import (
     DirectPageBatch,
     build_remote_fill_source_plan,
     merge_deferred_remote_fill_batches,

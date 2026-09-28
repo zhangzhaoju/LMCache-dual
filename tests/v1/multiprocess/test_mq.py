@@ -14,7 +14,7 @@ import zmq
 # First Party
 from lmcache.v1.multiprocess.custom_types import (
     BlockAllocationRecord,
-    CudaIPCWrapper,
+    NPUIPCWrapper,
     IPCCacheEngineKey,
 )
 from lmcache.v1.multiprocess.mq import (
@@ -366,11 +366,11 @@ def test_mq_register_kv_cache():
     Test MessageQueue with REGISTER_KV_CACHE request type.
     REGISTER_KV_CACHE takes (gpu_id: int, kv_cache: KVCache) and returns None.
     """
-    # Create test KV cache (list of CudaIPCWrapper objects)
+    # Create test KV cache (list of NPUIPCWrapper objects)
     kv_cache = []
     for _ in range(3):
         tensor = torch.randn(2, 4, device="cuda")
-        wrapper = CudaIPCWrapper(tensor)
+        wrapper = NPUIPCWrapper(tensor)
         kv_cache.append(wrapper)
 
     gpu_id = 0

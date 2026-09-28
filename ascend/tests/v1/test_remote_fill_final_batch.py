@@ -28,12 +28,12 @@ from lmcache.v1.remote_fill import (
 import msgspec
 import pytest
 
-from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine, _DirectStoreRequestState
-from lmcache_ascend.v1.remote_fill_coordinator import (
+from lmcache.v1.cache_engine import LMCacheEngine, _DirectStoreRequestState
+from lmcache.v1.remote_fill_coordinator import (
     ProducerRequestState,
     RemoteFillCoordinator,
 )
-from lmcache_ascend.v1.remote_fill_producer import (
+from lmcache.v1.remote_fill_producer import (
     RemoteFillFatalError,
     RemoteFillWindowResult,
 )
@@ -85,7 +85,7 @@ def fixture(
     layers=79,
     payload_widths=None,
 ):
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     config = SimpleNamespace(
         chunk_size=1024,
         dsa_two_groups=True,
@@ -111,8 +111,8 @@ def fixture(
     engine._remote_fill_direct_groups = lambda: groups
     engine._remote_fill_session_context = lambda: None
     engine._remote_fill_pages_per_window = lambda: 4 * len(groups)
-    engine._remote_fill_prepare_request = (
-        lambda *a: remote and not state.remote_fill.disabled_reason
+    engine._remote_fill_prepare_request = lambda *a: (
+        remote and not state.remote_fill.disabled_reason
     )
     engine._record_live_source_pages = lambda *a: None
     engine._finalize_direct_store = lambda *a, **k: setattr(state, "finalized", True)

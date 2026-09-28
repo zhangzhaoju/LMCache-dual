@@ -21,6 +21,7 @@ import time
 
 # Third Party
 import torch
+import torch_npu  # noqa: F401
 
 # First Party
 from lmcache.integration.vllm.utils import get_size_bytes
@@ -171,11 +172,11 @@ class LocalCPUBackend(AllocatorBackendInterface):
         self,
         config: LMCacheEngineConfig,
         metadata: Optional[LMCacheMetadata] = None,
-        dst_device: str = "cuda",
+        dst_device: str = "npu",
         lmcache_worker: Optional["LMCacheWorker"] = None,
         memory_allocator: Optional[MemoryAllocatorInterface] = None,
     ):
-        if torch.cuda.is_available():
+        if torch.npu.is_available():
             super().__init__(dst_device)
         else:
             super().__init__("cpu")

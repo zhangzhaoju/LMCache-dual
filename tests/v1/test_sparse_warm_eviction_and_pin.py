@@ -19,8 +19,8 @@ from tests.v1.storage_backend.test_local_cpu_backend import (
 )
 from tests.v1.utils import create_test_memory_obj
 
-pytest.importorskip("lmcache_ascend", reason="Ascend engine helpers required")
-from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine
+pytest.importorskip("lmcache", reason="Ascend engine helpers required")
+from lmcache.v1.cache_engine import LMCacheEngine
 
 
 @pytest.fixture
@@ -54,11 +54,11 @@ class TestSparseWarmDegradesOnEviction:
         assert not backend.contains(key)
 
         cached_tensors = [obj.tensor, obj.tensor]
-        assert AscendLMCacheEngine._has_retrieve_data_cache(cached_tensors, None, 2)
+        assert LMCacheEngine._has_retrieve_data_cache(cached_tensors, None, 2)
 
     def test_warm_metadata_keeps_stale_location_when_contains_misses(self) -> None:
         """Documents current behavior: contains() miss does not clear cached location."""
-        engine = AscendLMCacheEngine.__new__(AscendLMCacheEngine)
+        engine = LMCacheEngine.__new__(LMCacheEngine)
         engine.storage_manager = MagicMock()
         engine.storage_manager.contains.return_value = None
         engine.retrieve_locations = ["LocalCPUBackend", "RemoteBackend"]

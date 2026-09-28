@@ -48,12 +48,12 @@ def modules(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 def load_store(name: str, modules: Any, page_store: bool) -> Any:
-    path = Path(__file__).resolve().parents[2] / "lmcache_ascend/v1/cache_engine.py"
+    path = Path(__file__).resolve().parents[3] / "lmcache/v1/cache_engine.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     cls = next(
         item
         for item in tree.body
-        if isinstance(item, ast.ClassDef) and item.name == "AscendLMCacheEngine"
+        if isinstance(item, ast.ClassDef) and item.name == "LMCacheEngine"
     )
     method = next(
         item

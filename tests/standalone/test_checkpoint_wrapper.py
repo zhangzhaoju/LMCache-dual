@@ -24,7 +24,7 @@ def wrapper_class(*, include_init=False, factory=None):
         if isinstance(n, ast.FunctionDef)
         and n.name
         in {
-            *(["__init__"] if include_init else []),
+            *(["__init__", "_common_init"] if include_init else []),
             "handle_preemptions",
             "handle_preemptions_with_metadata",
             "supports_preemption_checkpoint",
@@ -81,7 +81,7 @@ def test_checkpoint_binding_is_cleared_when_capture_fails():
     assert calls == [("bind", "checkpoint-control"), ("capture", {"r"}), "clear"]
 
 
-def test_late_ascend_patch_is_resolved_at_connector_construction(monkeypatch):
+def test_native_adapter_is_resolved_lazily_at_connector_construction(monkeypatch):
     import sys
     from types import ModuleType
 
@@ -92,8 +92,7 @@ def test_late_ascend_patch_is_resolved_at_connector_construction(monkeypatch):
     class AscendImpl(OriginalImpl):
         pass
 
-    # The dynamic wrapper may already be imported when Ascend installs its
-    # implementation factory. Its previous global alias then remains stale.
+    # Loading the wrapper does not import the implementation or patch a class.
     wrapper = wrapper_class(include_init=True, factory=OriginalImpl)
     module = ModuleType("lmcache.integration.vllm.vllm_v1_adapter")
     module.LMCacheConnectorV1Impl = AscendImpl

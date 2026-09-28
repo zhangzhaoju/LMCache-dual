@@ -11,7 +11,7 @@ import pytest
 import torch
 
 # First Party
-from lmcache_ascend.v1.blend.positional_encoding import (
+from lmcache.v1.compute.npu_blend.positional_encoding import (
     BasicReverseRope,
     FusedRope,
     get_rope_compat,
@@ -33,7 +33,10 @@ if VLLM_INSTALLED:
     )
 
     # First Party
-    from lmcache_ascend.v1.blend.positional_encoding import BasicReverseRope, FusedRope
+    from lmcache.v1.compute.npu_blend.positional_encoding import (
+        BasicReverseRope,
+        FusedRope,
+    )
 
 
 # ==============================================================================

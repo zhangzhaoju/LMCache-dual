@@ -4,14 +4,14 @@
 from types import SimpleNamespace
 
 # Third Party
-from lmcache.v1.gpu_connector.sparse import (
+from lmcache.v1.device_connector.sparse import (
     PreparedSparseSource,
     PreparedSparseSourceLayer,
 )
 import torch
 
 # First Party
-from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine
+from lmcache.v1.cache_engine import LMCacheEngine
 
 
 class _RecordingConnector:
@@ -43,7 +43,7 @@ def _prepared_source(num_layers: int = 2) -> PreparedSparseSource:
 
 
 def test_prepared_sparse_retrieve_bypasses_bootstrap() -> None:
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.num_layers = 2
     engine.gpu_connector = _RecordingConnector(num_layers=2)
     engine.is_healthy = lambda: True
@@ -78,7 +78,7 @@ def test_prepared_sparse_retrieve_bypasses_bootstrap() -> None:
 
 
 def test_prepared_sparse_retrieve_uses_source_token_count() -> None:
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.num_layers = 2
     engine.gpu_connector = _RecordingConnector(num_layers=2)
     engine.is_healthy = lambda: True
@@ -98,7 +98,7 @@ def test_prepared_sparse_retrieve_uses_source_token_count() -> None:
 
 
 def test_dense_store_prepares_sparse_pointer_cache_without_shared_cpu() -> None:
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     calls = []
 
     def append_ptrs(

@@ -1,104 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
+"""Types and custom encoders/decoders for inter-process communication.
+
+IPCCacheEngineKey carries token IDs, start, end and request ID, and is converted
+to storage ObjectKey instances by ipc_key_to_object_keys().
+"""
+
 # Standard
 from dataclasses import dataclass, field
 from typing import Any, Callable
 import pickle
+import re
+import subprocess
 import threading
 
 # Third Party
 import msgspec
 import torch
-
-"""
-Defines the types and the customized encoder/decoders for inter-process
-communications.
-
-Key Types:
-- IPCCacheEngineKey: Token-based cache key
-  - Contains token_ids, start, end, request_id (all required)
-  - Converted to ObjectKey for storage operations via ipc_key_to_object_keys()
-"""
+import torch_npu  # noqa: F401
 
 
-class CudaIPCWrapper:
+class NPUIPCWrapper:
     _discovered_device_mapping: dict[str, int] = {}
+
     _device_mapping_lock = threading.Lock()
 
-    @staticmethod
-    def _get_device_uuid(device_index: int) -> str:
-        """Get the UUID of a GPU device given its index."""
-        return str(torch.cuda.get_device_properties(device_index).uuid)
-
-    @staticmethod
-    def _discover_gpu_devices():
-        """Discover all available GPU devices and map their UUIDs to
-        the physical device ordinals.
-        """
-        if not torch.cuda.is_available():
-            return
-
-        num_devices = torch.cuda.device_count()
-        with CudaIPCWrapper._device_mapping_lock:
-            if CudaIPCWrapper._discovered_device_mapping:
-                return  # Already discovered
-
-            for i in range(num_devices):
-                device_uuid = CudaIPCWrapper._get_device_uuid(i)
-                CudaIPCWrapper._discovered_device_mapping[device_uuid] = i
-
-    @staticmethod
-    def _get_device_index_from_uuid(device_uuid: str) -> int:
-        """Get the physical device ordinal from its UUID."""
-        CudaIPCWrapper._discover_gpu_devices()
-
-        with CudaIPCWrapper._device_mapping_lock:
-            device_index = CudaIPCWrapper._discovered_device_mapping.get(
-                device_uuid, None
-            )
-
-        if device_index is None:
-            raise RuntimeError(
-                f"Device UUID {device_uuid} not found in the discovered devices."
-                "Please make sure the process can see all the GPU devices"
-            )
-        return device_index
-
-    def __init__(self, tensor: torch.Tensor):
-        # First Party
-        from lmcache.v1.gpu_connector.utils import assert_contiguous
-
-        assert_contiguous(tensor)
-
-        storage = tensor.untyped_storage()
-        handle = storage._share_cuda_()
-
-        self.handle = handle
-        self.dtype = tensor.dtype
-        self.shape = tuple(tensor.shape)
-        self.stride = tuple(tensor.stride())
-        self.storage_offset = int(tensor.storage_offset())
-
-        device_index = tensor.device.index
-        self.device_uuid = CudaIPCWrapper._get_device_uuid(device_index)
-
-    def to_tensor(self) -> torch.Tensor:
-        """
-        Note:
-            This function may break if torch cuda is not initialized.
-            We should call `torch.cuda.init()` before using this function.
-        """
-        device_index = CudaIPCWrapper._get_device_index_from_uuid(self.device_uuid)
-
-        storage = torch.UntypedStorage._new_shared_cuda(  # noqa: SLF001
-            device_index, *self.handle[1:]
-        )
-
-        t = torch.empty((), device=f"cuda:{device_index}", dtype=self.dtype)
-        t.set_(storage, self.storage_offset, self.shape, self.stride)
-        return t
-
     def __eq__(self, other):
-        if not isinstance(other, CudaIPCWrapper):
+        if not isinstance(other, NPUIPCWrapper):
             return False
         return (
             self.handle == other.handle
@@ -110,12 +37,106 @@ class CudaIPCWrapper:
         )
 
     @staticmethod
-    def Serialize(obj: "CudaIPCWrapper") -> bytes:
+    def Serialize(obj: "NPUIPCWrapper") -> bytes:
         return pickle.dumps(obj)
 
     @staticmethod
-    def Deserialize(data: bytes) -> "CudaIPCWrapper":
+    def Deserialize(data: bytes) -> "NPUIPCWrapper":
         return pickle.loads(data)
+
+    def __init__(self, tensor: torch.Tensor) -> None:
+        storage = tensor.untyped_storage()
+        handle = storage._share_npu_()
+
+        self.handle = handle
+        self.dtype = tensor.dtype
+        self.shape = tuple(tensor.shape)
+        self.stride = tuple(tensor.stride())
+        self.storage_offset = int(tensor.storage_offset())
+        device_index = tensor.device.index
+        self.device_uuid = NPUIPCWrapper._get_device_uuid(device_index)
+
+    @staticmethod
+    def _get_device_uuid(device_index: int) -> str:
+        """
+        Ascend does not support uuid from the get_device_properties.
+        Retrieves the VDie ID (Silicon ID) for Ascend device.
+        Falls back to PCIe Bus ID if VDie ID is unavailable.
+        """
+        device_name = torch.npu.get_device_name()
+
+        try:
+            # Run the npu-smi command
+            cmd = ["npu-smi", "info", "-t", "board", "-i", str(device_index), "-c", "0"]
+            result = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode(
+                "utf-8"
+            )
+
+            # 1. Try to find VDie ID
+            # Matches: "VDie ID : XXXXX XXXX..."
+            vdie_match = re.search(r"VDie ID\s*:\s*([0-9A-F ]+)", result)
+            if vdie_match:
+                raw_id = vdie_match.group(1).replace(" ", "")
+                if raw_id and not all(c == "0" for c in raw_id):
+                    return f"{device_name}-{raw_id}"
+
+            # 2. Fallback to PCIe Bus Info (Best Local ID)
+            # Matches: "PCIe Bus Info : 0000:C1:00.0"
+            pci_match = re.search(r"PCIe Bus Info\s*:\s*([0-9A-Fa-f:.]+)", result)
+            if pci_match:
+                return f"{device_name}-{pci_match.group(1)}"
+
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            raise RuntimeError("Failed to retrieve device UUID from npu-smi.") from e
+
+        # 3. Final Fallback (Unlikely to be unique globally)
+        return f"{device_name}-{device_index}"
+
+    @staticmethod
+    def _discover_gpu_devices():
+        """Discover all available GPU devices and map their UUIDs to
+        the physical device ordinals.
+        """
+        if not torch.npu.is_available():
+            return
+
+        num_devices = torch.npu.device_count()
+        with NPUIPCWrapper._device_mapping_lock:
+            if NPUIPCWrapper._discovered_device_mapping:
+                return  # Already discovered
+
+            for i in range(num_devices):
+                device_uuid = NPUIPCWrapper._get_device_uuid(i)
+                NPUIPCWrapper._discovered_device_mapping[device_uuid] = i
+
+    @staticmethod
+    def _get_device_index_from_uuid(device_uuid: str) -> int:
+        """Get the physical device ordinal from its UUID."""
+        NPUIPCWrapper._discover_gpu_devices()
+
+        with NPUIPCWrapper._device_mapping_lock:
+            device_index = NPUIPCWrapper._discovered_device_mapping.get(
+                device_uuid, None
+            )
+
+        if device_index is None:
+            raise RuntimeError(
+                f"Device UUID {device_uuid} not found in the discovered devices."
+                " Please make sure the process can see all the GPU devices."
+            )
+        return device_index
+
+    def to_tensor(self):
+        """
+        Note:
+            This function may break if torch npu is not initialized.
+            We should call `torch.npu.init()` before using this function.
+        """
+        device = NPUIPCWrapper._get_device_index_from_uuid(self.device_uuid)
+        storage = torch.UntypedStorage._new_shared_npu(device, *self.handle[1:])
+        t = torch.empty((), device=f"npu:{device}", dtype=self.dtype)
+        t.set_(storage, self.storage_offset, self.shape, self.stride)
+        return t
 
 
 @dataclass(order=True, frozen=True)
@@ -181,7 +202,7 @@ class IPCCacheEngineKey:
 
 
 # Type exports
-KVCache = list[CudaIPCWrapper]
+KVCache = list[NPUIPCWrapper]
 
 
 @dataclass
@@ -192,9 +213,9 @@ class CustomizedSerdeConfig:
 
 
 _CUSTOMERIZED_SERIALIZERS = {
-    CudaIPCWrapper: CustomizedSerdeConfig(
-        serializer=CudaIPCWrapper.Serialize,
-        deserializer=CudaIPCWrapper.Deserialize,
+    NPUIPCWrapper: CustomizedSerdeConfig(
+        serializer=NPUIPCWrapper.Serialize,
+        deserializer=NPUIPCWrapper.Deserialize,
         code=1,
     ),
 }

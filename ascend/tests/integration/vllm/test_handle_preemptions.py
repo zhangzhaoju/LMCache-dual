@@ -16,13 +16,13 @@ def _import_and_patch_vllm_connector():
         LMCacheConnectorV1,
     )
 
-    lmcache_ascend = pytest.importorskip("lmcache_ascend")
-    lmcache_ascend._patch_vllm_v1_adapter()
+    lmcache_ascend = pytest.importorskip("lmcache")
+    lmcache._patch_vllm_v1_adapter()
     return LMCacheConnectorV1
 
 
 def _make_adapter(adapter_mod, *, store_async, kv_role, lmcache_engine):
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     adapter.store_async = store_async
     adapter.kv_role = kv_role
     adapter._manager = SimpleNamespace(lmcache_engine=lmcache_engine)
@@ -105,17 +105,11 @@ def test_lmcache_connector_patch_advertises_staged_sfa_sparse_load():
         ("unknown", False),
     ),
 )
-def test_dynamic_connector_advertises_staged_sparse_load_by_role(
-    kv_role, expected
-):
+def test_dynamic_connector_advertises_staged_sparse_load_by_role(kv_role, expected):
     pytest.importorskip("lmcache")
     pytest.importorskip("vllm")
-    connector_mod = pytest.importorskip(
-        "lmcache_ascend.integration.vllm.lmcache_ascend_connector_v1"
-    )
-    connector = object.__new__(
-        connector_mod.LMCacheAscendConnectorV1Dynamic
-    )
+    connector_mod = pytest.importorskip("lmcache.integration.vllm.lmcache_connector_v1")
+    connector = object.__new__(connector_mod.LMCacheConnectorV1Dynamic)
     connector._lmcache_engine = SimpleNamespace(
         use_layerwise=True,
         kv_role=kv_role,
@@ -133,9 +127,7 @@ def test_dynamic_connector_advertises_staged_sparse_load_by_role(
 def test_dynamic_connector_forwards_vllm_kv_cache_config(monkeypatch):
     pytest.importorskip("lmcache")
     pytest.importorskip("vllm")
-    connector_mod = pytest.importorskip(
-        "lmcache_ascend.integration.vllm.lmcache_ascend_connector_v1"
-    )
+    connector_mod = pytest.importorskip("lmcache.integration.vllm.lmcache_connector_v1")
     captured = {}
     vllm_config = object()
     role = object()
@@ -150,7 +142,7 @@ def test_dynamic_connector_forwards_vllm_kv_cache_config(monkeypatch):
         fake_init,
     )
 
-    connector_mod.LMCacheAscendConnectorV1Dynamic(
+    connector_mod.LMCacheConnectorV1Dynamic(
         vllm_config,
         role,
         kv_cache_config,
@@ -166,9 +158,7 @@ def test_dynamic_connector_forwards_vllm_kv_cache_config(monkeypatch):
 def test_ascend_impl_forwards_vllm_kv_cache_config(monkeypatch):
     pytest.importorskip("lmcache")
     pytest.importorskip("vllm")
-    adapter_mod = pytest.importorskip(
-        "lmcache_ascend.integration.vllm.vllm_v1_adapter"
-    )
+    adapter_mod = pytest.importorskip("lmcache.integration.vllm.vllm_v1_adapter")
     captured = {}
     vllm_config = object()
     role = object()
@@ -191,7 +181,7 @@ def test_ascend_impl_forwards_vllm_kv_cache_config(monkeypatch):
         fake_init,
     )
 
-    adapter_mod.LMCacheAscendConnectorV1Impl(
+    adapter_mod.LMCacheConnectorV1Impl(
         vllm_config,
         role,
         parent,
@@ -216,7 +206,7 @@ def test_ascend_adapter_drains_pending_stores_for_async_producer():
     """Async non-consumer workers must drain pending stores before reuse."""
     pytest.importorskip("lmcache")
     pytest.importorskip("vllm")
-    adapter_mod = pytest.importorskip("lmcache_ascend.integration.vllm.vllm_v1_adapter")
+    adapter_mod = pytest.importorskip("lmcache.integration.vllm.vllm_v1_adapter")
 
     lmcache_engine = MagicMock()
     lmcache_engine.wait_for_pending_stores.return_value = {"req-1"}
@@ -231,9 +221,7 @@ def test_ascend_adapter_drains_pending_stores_for_async_producer():
     adapter.handle_preemptions(preempted_req_ids)
 
     lmcache_engine.wait_for_pending_stores.assert_called_once_with(preempted_req_ids)
-    lmcache_engine.drop_direct_store_states.assert_called_once_with(
-        preempted_req_ids
-    )
+    lmcache_engine.drop_direct_store_states.assert_called_once_with(preempted_req_ids)
 
 
 @pytest.mark.parametrize(
@@ -249,7 +237,7 @@ def test_ascend_adapter_skips_preemption_drain_when_not_required(
 ):
     pytest.importorskip("lmcache")
     pytest.importorskip("vllm")
-    adapter_mod = pytest.importorskip("lmcache_ascend.integration.vllm.vllm_v1_adapter")
+    adapter_mod = pytest.importorskip("lmcache.integration.vllm.vllm_v1_adapter")
 
     lmcache_engine = MagicMock() if has_engine else None
     adapter = _make_adapter(

@@ -48,7 +48,7 @@ def lookup_engine(store, engine, control, calls):
 
     cls = implementation(
         "lmcache_ascend/v1/cache_engine.py",
-        "AscendLMCacheEngine",
+        "LMCacheEngine",
         {"_lookup_remote_fill_two_group_prefix"},
         Base,
         LOCAL_CHECKPOINT_CONFIG=control.LOCAL_CHECKPOINT_CONFIG,
@@ -158,7 +158,7 @@ def adapter(calls):
 
     cls = implementation(
         "lmcache_ascend/integration/vllm/vllm_v1_adapter.py",
-        "LMCacheAscendConnectorV1Impl",
+        "LMCacheConnectorV1Impl",
         {
             "_run_dsa_cold_indexer_load",
             "_run_dsa_cold_compact_load",
@@ -318,7 +318,7 @@ def test_checkpoint_control_acknowledgement_passes_real_shared_envelope_validati
     )
     cls = implementation(
         "lmcache_ascend/v1/cache_engine.py",
-        "AscendLMCacheEngine",
+        "LMCacheEngine",
         {"prepare_checkpoint_restore"},
         Base,
         NativeExternalPageTransferUnknownError=type("Unknown", (RuntimeError,), {}),
@@ -531,7 +531,7 @@ def test_unknown_checkpoint_prefix_dma_latches_existing_restart_guard():
 
     cls = implementation(
         "lmcache_ascend/v1/cache_engine.py",
-        "AscendLMCacheEngine",
+        "LMCacheEngine",
         {"prepare_checkpoint_restore"},
         object,
         NativeExternalPageTransferUnknownError=Unknown,

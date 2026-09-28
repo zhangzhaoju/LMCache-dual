@@ -9,6 +9,7 @@ import time
 # Third Party
 import msgspec
 import torch
+import torch_npu  # noqa: F401
 import zmq
 
 # First Party
@@ -222,7 +223,7 @@ class PDBackend(AllocatorBackendInterface):
     ) -> PagedCpuGpuMemoryAllocator:
         if self.corrected_device != "cpu":
             logger.info(f"Setting cuda device to {self.corrected_device} ")
-            torch.cuda.set_device(self.corrected_device)
+            torch.npu.set_device(self.corrected_device)
 
         paged_mem_allocator = PagedCpuGpuMemoryAllocator()
 

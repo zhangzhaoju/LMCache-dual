@@ -7,14 +7,14 @@ from unittest.mock import MagicMock
 import torch
 
 # First Party
-from lmcache_ascend.v1.cache_engine import (
-    AscendLMCacheEngine,
+from lmcache.v1.cache_engine import (
+    LMCacheEngine,
     LOCAL_CPU_BACKEND_NAME,
 )
 
 
 def test_warm_cached_retrieve_skips_contains_and_uses_local_cpu() -> None:
-    engine = AscendLMCacheEngine.__new__(AscendLMCacheEngine)
+    engine = LMCacheEngine.__new__(LMCacheEngine)
     engine.storage_manager = MagicMock()
     engine.storage_manager.storage_backends = {LOCAL_CPU_BACKEND_NAME: MagicMock()}
     engine.retrieve_locations = None
@@ -47,7 +47,7 @@ def test_warm_cached_retrieve_skips_contains_and_uses_local_cpu() -> None:
 
 
 def test_shared_passive_cached_metadata_skips_storage_probe() -> None:
-    engine = AscendLMCacheEngine.__new__(AscendLMCacheEngine)
+    engine = LMCacheEngine.__new__(LMCacheEngine)
     engine.storage_manager = None
     engine.num_layers = 1
     engine._should_use_shared_layerwise_retrieve = lambda _kv_group: True

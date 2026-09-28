@@ -59,9 +59,7 @@ def mp_npu_harness():
 class TestSchedulerWorkerLookupPinSplit:
     """Lookup pins live only on the worker; scheduler uses ZMQ lookup client."""
 
-    def test_scheduler_lookup_pins_on_worker_not_scheduler(
-        self, mp_harness
-    ) -> None:
+    def test_scheduler_lookup_pins_on_worker_not_scheduler(self, mp_harness) -> None:
         req_id = "mp-req-lookup-pin"
         hits = mp_harness.scheduler_call(
             {
@@ -72,9 +70,7 @@ class TestSchedulerWorkerLookupPinSplit:
         )
         assert hits["hits"] == 256
 
-        pin_state = mp_harness.worker_call(
-            {"op": "has_lookup_pins", "req_id": req_id}
-        )
+        pin_state = mp_harness.worker_call({"op": "has_lookup_pins", "req_id": req_id})
         assert pin_state["has_pins"] is True
 
 
@@ -96,9 +92,7 @@ class TestSparseDecodeDeferredUnpinAcrossProcesses:
 
         sparse_meta = _make_sparse_req_meta(req_id, can_load=True)
         for _ in range(3):
-            mp_harness.worker_call(
-                {"op": "wait_for_save", "requests": [sparse_meta]}
-            )
+            mp_harness.worker_call({"op": "wait_for_save", "requests": [sparse_meta]})
             pin_state = mp_harness.worker_call(
                 {"op": "has_lookup_pins", "req_id": req_id}
             )
@@ -120,21 +114,15 @@ class TestNonSparseUnpinBoundary:
                 "lookup_id": req_id,
             }
         )
-        pin_state = mp_harness.worker_call(
-            {"op": "has_lookup_pins", "req_id": req_id}
-        )
+        pin_state = mp_harness.worker_call({"op": "has_lookup_pins", "req_id": req_id})
         assert pin_state["has_pins"] is True
 
         normal_meta = _make_sparse_req_meta(
             req_id, can_load=True, is_sparse_decode=False
         )
-        mp_harness.worker_call(
-            {"op": "wait_for_save", "requests": [normal_meta]}
-        )
+        mp_harness.worker_call({"op": "wait_for_save", "requests": [normal_meta]})
 
-        pin_state = mp_harness.worker_call(
-            {"op": "has_lookup_pins", "req_id": req_id}
-        )
+        pin_state = mp_harness.worker_call({"op": "has_lookup_pins", "req_id": req_id})
         assert pin_state["has_pins"] is False
 
 
@@ -155,16 +143,12 @@ class TestSchedulerWorkerFinishConsistency:
         mp_harness.worker_call({"op": "save_worker_state", "req_id": req_id})
 
         sparse_meta = _make_sparse_req_meta(req_id, can_load=True)
-        mp_harness.worker_call(
-            {"op": "wait_for_save", "requests": [sparse_meta]}
-        )
+        mp_harness.worker_call({"op": "wait_for_save", "requests": [sparse_meta]})
 
         # Scheduler no longer includes req_id in active metadata (missed finish).
         mp_harness.worker_call({"op": "prune", "active_req_ids": []})
 
-        pin_state = mp_harness.worker_call(
-            {"op": "has_lookup_pins", "req_id": req_id}
-        )
+        pin_state = mp_harness.worker_call({"op": "has_lookup_pins", "req_id": req_id})
         assert pin_state["has_pins"] is False
         keys = mp_harness.worker_call({"op": "worker_state_keys"})
         assert req_id not in keys["keys"]
@@ -185,9 +169,7 @@ class TestSchedulerWorkerFinishConsistency:
 
         mp_harness.worker_call({"op": "get_finished", "req_id": req_id})
 
-        pin_state = mp_harness.worker_call(
-            {"op": "has_lookup_pins", "req_id": req_id}
-        )
+        pin_state = mp_harness.worker_call({"op": "has_lookup_pins", "req_id": req_id})
         assert pin_state["has_pins"] is False
         keys = mp_harness.worker_call({"op": "worker_state_keys"})
         assert req_id not in keys["keys"]
@@ -209,9 +191,7 @@ class TestPreemptWorkerConsistency:
 
         mp_harness.worker_call({"op": "preempt", "req_ids": [req_id]})
 
-        pin_state = mp_harness.worker_call(
-            {"op": "has_lookup_pins", "req_id": req_id}
-        )
+        pin_state = mp_harness.worker_call({"op": "has_lookup_pins", "req_id": req_id})
         assert pin_state["has_pins"] is False
         keys = mp_harness.worker_call({"op": "worker_state_keys"})
         assert req_id not in keys["keys"]
@@ -235,9 +215,7 @@ class TestZombieMetadataBoundary:
 
         # Step with active sparse decode metadata.
         sparse_meta = _make_sparse_req_meta(req_id, can_load=True)
-        mp_harness.worker_call(
-            {"op": "wait_for_save", "requests": [sparse_meta]}
-        )
+        mp_harness.worker_call({"op": "wait_for_save", "requests": [sparse_meta]})
         keys = mp_harness.worker_call({"op": "worker_state_keys"})
         assert req_id in keys["keys"]
 
@@ -247,14 +225,12 @@ class TestZombieMetadataBoundary:
 
         keys = mp_harness.worker_call({"op": "worker_state_keys"})
         assert req_id not in keys["keys"]
-        pin_state = mp_harness.worker_call(
-            {"op": "has_lookup_pins", "req_id": req_id}
-        )
+        pin_state = mp_harness.worker_call({"op": "has_lookup_pins", "req_id": req_id})
         assert pin_state["has_pins"] is False
 
 
 class TestNpuWaitForSaveAcrossProcesses:
-    """Ascend LMCacheAscendConnectorV1Impl.wait_for_save on real NPU engine."""
+    """Ascend LMCacheConnectorV1Impl.wait_for_save on real NPU engine."""
 
     @pytest.mark.skipif(not npu_available(), reason="NPU required")
     def test_npu_sparse_decode_pins_deferred_across_wait_for_save(
@@ -293,9 +269,7 @@ class TestNpuWaitForSaveAcrossProcesses:
         )
         assert pin_state["has_pins"] is True
 
-        normal_meta = _make_normal_decode_meta(
-            req_id, can_load=True, can_save=False
-        )
+        normal_meta = _make_normal_decode_meta(req_id, can_load=True, can_save=False)
         mp_npu_harness.worker_wait_for_save([normal_meta], path="npu")
 
         pin_state = mp_npu_harness.worker_call(

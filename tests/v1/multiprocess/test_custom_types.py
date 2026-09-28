@@ -11,7 +11,7 @@ import torch
 # First Party
 from lmcache.v1.multiprocess.custom_types import (
     BlockAllocationRecord,
-    CudaIPCWrapper,
+    NPUIPCWrapper,
     IPCCacheEngineKey,
     get_customized_decoder,
     get_customized_encoder,
@@ -43,44 +43,44 @@ def test_ipc_cache_engine_key_serialization():
 
 @pytest.mark.skipif(
     not torch.cuda.is_available(),
-    reason="CUDA is required for CudaIPCWrapper tests",
+    reason="CUDA is required for NPUIPCWrapper tests",
 )
 def test_cudaipc_wrapper_serialization():
-    """Test custom encoder/decoder for single CudaIPCWrapper object."""
-    encoder = get_customized_encoder(type=CudaIPCWrapper)
-    decoder = get_customized_decoder(type=CudaIPCWrapper)
+    """Test custom encoder/decoder for single NPUIPCWrapper object."""
+    encoder = get_customized_encoder(type=NPUIPCWrapper)
+    decoder = get_customized_decoder(type=NPUIPCWrapper)
 
     # Create a sample tensor
     original_tensor = torch.randn(3, 4, device="cuda")
-    wrapper = CudaIPCWrapper(original_tensor)
+    wrapper = NPUIPCWrapper(original_tensor)
 
     # Encode the wrapper
     encoded = encoder.encode(wrapper)
 
     # Decode the wrapper
     decoded_wrapper = decoder.decode(encoded)
-    assert isinstance(decoded_wrapper, CudaIPCWrapper), (
-        "Decoded object is not of type CudaIPCWrapper"
+    assert isinstance(decoded_wrapper, NPUIPCWrapper), (
+        "Decoded object is not of type NPUIPCWrapper"
     )
     assert decoded_wrapper == wrapper, (
-        "Decoded CudaIPCWrapper does not match the original"
+        "Decoded NPUIPCWrapper does not match the original"
     )
 
 
 @pytest.mark.skipif(
     not torch.cuda.is_available(),
-    reason="CUDA is required for CudaIPCWrapper tests",
+    reason="CUDA is required for NPUIPCWrapper tests",
 )
 def test_cudaipc_wrapper_list_serialization():
-    """Test custom encoder/decoder for list of CudaIPCWrapper objects."""
+    """Test custom encoder/decoder for list of NPUIPCWrapper objects."""
     wrappers = []
     for _ in range(5):
         tensor = torch.randn(2, 2, device="cuda")
-        wrapper = CudaIPCWrapper(tensor)
+        wrapper = NPUIPCWrapper(tensor)
         wrappers.append(wrapper)
 
-    encoder = get_customized_encoder(type=list[CudaIPCWrapper])
-    decoder = get_customized_decoder(type=list[CudaIPCWrapper])
+    encoder = get_customized_encoder(type=list[NPUIPCWrapper])
+    decoder = get_customized_decoder(type=list[NPUIPCWrapper])
 
     # Encode the list of wrappers
     encoded = encoder.encode(wrappers)
@@ -93,7 +93,7 @@ def test_cudaipc_wrapper_list_serialization():
     )
 
     for original, decoded in zip(wrappers, decoded_wrappers, strict=False):
-        assert original == decoded, "Decoded CudaIPCWrapper does not match the original"
+        assert original == decoded, "Decoded NPUIPCWrapper does not match the original"
 
 
 def _worker_process_deserialize_and_reconstruct(
@@ -101,12 +101,12 @@ def _worker_process_deserialize_and_reconstruct(
 ):
     """
     Worker function that runs in a separate process.
-    Deserializes CudaIPCWrapper list and reconstructs tensors.
+    Deserializes NPUIPCWrapper list and reconstructs tensors.
     """
     try:
         # Decode the list of wrappers
         torch.cuda.init()
-        decoder = get_customized_decoder(type=list[CudaIPCWrapper])
+        decoder = get_customized_decoder(type=list[NPUIPCWrapper])
         decoded_wrappers = decoder.decode(encoded_data)
 
         # Convert each wrapper back to tensor and compute checksum
@@ -129,11 +129,11 @@ def _worker_process_deserialize_and_reconstruct(
 
 @pytest.mark.skipif(
     not torch.cuda.is_available(),
-    reason="CUDA is required for CudaIPCWrapper multiprocessing tests",
+    reason="CUDA is required for NPUIPCWrapper multiprocessing tests",
 )
 def test_cudaipc_wrapper_multiprocess_serialization():
     """
-    Test CudaIPCWrapper serialization across processes using spawn method.
+    Test NPUIPCWrapper serialization across processes using spawn method.
     This verifies that CUDA IPC handles can be properly shared between processes.
     """
     # Set multiprocessing start method to spawn
@@ -151,7 +151,7 @@ def test_cudaipc_wrapper_multiprocess_serialization():
             (2, 3), fill_value=float(i + 1), dtype=torch.float32, device="cuda"
         )
         tensors.append(tensor)
-        wrapper = CudaIPCWrapper(tensor)
+        wrapper = NPUIPCWrapper(tensor)
         wrappers.append(wrapper)
 
         # Store expected checksum and shape
@@ -160,7 +160,7 @@ def test_cudaipc_wrapper_multiprocess_serialization():
         test_data.append((expected_checksum, expected_shape))
 
     # Serialize the wrappers
-    encoder = get_customized_encoder(type=list[CudaIPCWrapper])
+    encoder = get_customized_encoder(type=list[NPUIPCWrapper])
     encoded_data = encoder.encode(wrappers)
 
     # Create a queue for results

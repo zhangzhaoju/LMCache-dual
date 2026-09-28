@@ -93,8 +93,12 @@ def init_api(config):
             "_validate_preemption_checkpoint_setup": ns[validate.name],
         },
     )
-    kv = NS(kv_cache_groups=[NS(layer_names=["model.layers.0.self_attn.attn"]),
-                            NS(layer_names=["model.layers.0.self_attn.indexer.k_cache"])])
+    kv = NS(
+        kv_cache_groups=[
+            NS(layer_names=["model.layers.0.self_attn.attn"]),
+            NS(layer_names=["model.layers.0.self_attn.indexer.k_cache"]),
+        ]
+    )
     return partial(cls, kv_cache_config=kv), calls, ResourcesStarted
 
 
@@ -120,7 +124,9 @@ def configs():
         ),
         speculative_config=None,
         cache_config=NS(enable_prefix_caching=False),
-        scheduler_config=NS(get_scheduler_cls=lambda: NS(supports_checkpoint_restore_retry=True)),
+        scheduler_config=NS(
+            get_scheduler_cls=lambda: NS(supports_checkpoint_restore_retry=True)
+        ),
     )
     parent = type(
         "CheckpointConnector", (), {"handle_preemptions_with_metadata": lambda *a: None}
@@ -147,9 +153,9 @@ def test_scheduler_does_not_import_native_ops():
 
 def test_missing_native_binding_is_not_swallowed_by_manager(monkeypatch):
     config, vllm, parent = configs()
-    package = ModuleType("lmcache_ascend")
+    package = ModuleType("lmcache")
     package.c_ops = NS()
-    monkeypatch.setitem(sys.modules, "lmcache_ascend", package)
+    monkeypatch.setitem(sys.modules, "lmcache", package)
     cls, calls, _ = init_api(config)
     with pytest.raises(ValueError, match="Rebuild"):
         cls(vllm, Role.WORKER, parent)

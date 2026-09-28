@@ -98,6 +98,10 @@ class LMCacheLookupClient(LookupClientInterface):
         lookup_id: str,
         request_configs: Optional[dict] = None,
     ) -> Optional[int]:
+        if not isinstance(token_ids, list):
+            token_ids = (
+                token_ids.tolist() if hasattr(token_ids, "tolist") else list(token_ids)
+            )
         request_configs_str = ""
         if request_configs is not None and len(request_configs) != 0:
             request_configs_str = json.dumps(request_configs)

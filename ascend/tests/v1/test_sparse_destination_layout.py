@@ -10,8 +10,8 @@ import pytest
 import torch
 
 # First Party
-from lmcache_ascend.v1.npu_connector import npu_connectors
-from lmcache_ascend.v1.npu_connector.npu_connectors import (
+from lmcache.v1.npu_connector import npu_connectors
+from lmcache.v1.npu_connector.npu_connectors import (
     VLLMPagedMemLayerwiseNPUConnector,
 )
 
@@ -93,21 +93,31 @@ def test_seal_requires_runtime_counts_or_an_initialized_dsa_layout(monkeypatch):
 
 def test_factory_carries_runtime_cardinality_into_destination_seal(monkeypatch):
     from lmcache.utils import EngineType
-    from lmcache_ascend.v1 import npu_connector as factory
+    from lmcache.v1 import npu_connector as factory
 
     connector, caches, _, _ = _destination_setup(monkeypatch, 3)
-    metadata = SimpleNamespace(worker_id=0, use_mla=True,
-                               runtime_kv_group_layer_counts=(3, 1))
-    config = SimpleNamespace(use_layerwise=True, enable_blending=False,
-                             dsa_two_groups=True, enable_npu_transfer_validation=True)
+    metadata = SimpleNamespace(
+        worker_id=0, use_mla=True, runtime_kv_group_layer_counts=(3, 1)
+    )
+    config = SimpleNamespace(
+        use_layerwise=True,
+        enable_blending=False,
+        dsa_two_groups=True,
+        enable_npu_transfer_validation=True,
+    )
     cpu_device = torch.device("cpu")
     monkeypatch.setattr(factory, "need_gpu_interm_buffer", lambda _: False)
     monkeypatch.setattr(factory, "configure_npu_content_diagnostics", lambda _: None)
-    monkeypatch.setattr(torch, "npu", SimpleNamespace(
-        device_count=lambda: 1, set_device=lambda _: None), raising=False)
+    monkeypatch.setattr(
+        torch,
+        "npu",
+        SimpleNamespace(device_count=lambda: 1, set_device=lambda _: None),
+        raising=False,
+    )
     monkeypatch.setattr(torch, "device", lambda _: cpu_device)
-    monkeypatch.setattr(VLLMPagedMemLayerwiseNPUConnector, "from_metadata",
-                        lambda *a, **kw: connector)
+    monkeypatch.setattr(
+        VLLMPagedMemLayerwiseNPUConnector, "from_metadata", lambda *a, **kw: connector
+    )
     actual = factory.CreateNPUConnector(config, metadata, EngineType.VLLM)
     assert actual is connector
     assert actual.runtime_kv_group_layer_counts == (3, 1)
@@ -120,8 +130,7 @@ def test_first_prepared_load_after_early_seal_initializes_only_latent_metadata(
 ):
     connector, _, kwargs, prepare = _destination_setup(monkeypatch, layers)
     caches = [
-        (torch.zeros(2, 4, 1, 512), torch.zeros(2, 4, 1, 64))
-        for _ in range(layers)
+        (torch.zeros(2, 4, 1, 512), torch.zeros(2, 4, 1, 64)) for _ in range(layers)
     ]
     connector.dsa_two_groups = connector.use_mla = True
     connector.use_gpu = False
@@ -136,16 +145,21 @@ def test_first_prepared_load_after_early_seal_initializes_only_latent_metadata(
     assert 0 not in connector._group_layouts
     source = SimpleNamespace(
         layers=[SimpleNamespace(chunk_ptrs_npu=torch.ones(1)) for _ in caches],
-        total_tokens=4, chunk_token_counts=(4,), validated_chunk_size=4,
+        total_tokens=4,
+        chunk_token_counts=(4,),
+        validated_chunk_size=4,
     )
     signature = MagicMock(side_effect=AssertionError("sealed metadata was rebuilt"))
     monkeypatch.setattr(connector, "_vllm_layer_cache_identity_signature", signature)
     plans = []
     for _ in range(2):
         loader = connector.batched_to_gpu_head_token_wise(
-            prepared_sparse_source=source, kvcaches=caches,
+            prepared_sparse_source=source,
+            kvcaches=caches,
             slot_mapping=kwargs["slot_mapping_ref"],
-            registered_destination_layout=binding, kv_group=0, sync=False,
+            registered_destination_layout=binding,
+            kv_group=0,
+            sync=False,
         )
         try:
             next(loader)  # Prepare metadata; no layer payload is submitted.
@@ -325,9 +339,7 @@ def test_sealed_destination_generators_forward_current_request_payloads(monkeypa
     monkeypatch.setattr(
         connector, "_run_prepared_sparse_direct_kv_transfer_layer", transfer
     )
-    monkeypatch.setattr(
-        npu_connectors, "serving_perf_detailed_enabled", lambda: False
-    )
+    monkeypatch.setattr(npu_connectors, "serving_perf_detailed_enabled", lambda: False)
     monkeypatch.setattr(
         npu_connectors, "npu_content_diagnostics_enabled", lambda: False
     )

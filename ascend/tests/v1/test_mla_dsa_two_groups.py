@@ -13,6 +13,7 @@ Covers:
 - _is_mla_dsa_format helper
 - Integration: two-group store/load roundtrip with separate latent and indexer keys
 """
+
 # Standard
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -30,7 +31,7 @@ from lmcache.v1.memory_management import (
     MemoryFormat,
     TensorMemoryAllocator,
 )
-from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine
+from lmcache.v1.cache_engine import LMCacheEngine
 
 # Local
 from .utils import dumb_metadata, generate_tokens
@@ -40,6 +41,7 @@ from .utils import dumb_metadata, generate_tokens
 # Format detection tests
 # ---------------------------------------------------------------------------
 
+
 class TestKVCacheFormatDetect:
     """Test KVCacheFormat.detect() with and without dsa_two_groups."""
 
@@ -48,9 +50,7 @@ class TestKVCacheFormatDetect:
         k_pe = torch.zeros(num_blocks, block_size, 1, 64, dtype=torch.bfloat16)
         return [(k_nope, k_pe)]
 
-    def _make_tp8_equal_width_mla_latent_tensors(
-        self, num_blocks=4, block_size=128
-    ):
+    def _make_tp8_equal_width_mla_latent_tensors(self, num_blocks=4, block_size=128):
         k_nope = torch.zeros(num_blocks, block_size, 1, 128, dtype=torch.bfloat16)
         k_pe = torch.zeros(num_blocks, block_size, 1, 128, dtype=torch.bfloat16)
         return [(k_nope, k_pe)]
@@ -74,14 +74,14 @@ class TestKVCacheFormatDetect:
         return [torch.zeros(2, num_blocks, block_size, 1, 128, dtype=torch.bfloat16)]
 
     def test_detect_mla_latent_with_two_groups(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_mla_latent_tensors()
         fmt = KVCacheFormat.detect(kvcaches, dsa_two_groups=True)
         assert fmt == KVCacheFormat.MLA_LATENT
 
     def test_detect_mla_latent_with_tp8_equal_width_two_groups(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_tp8_equal_width_mla_latent_tensors()
         fmt = KVCacheFormat.detect(
@@ -92,7 +92,7 @@ class TestKVCacheFormatDetect:
         assert fmt == KVCacheFormat.MLA_LATENT
 
     def test_equal_width_non_mla_pair_stays_separate_kv(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_tp8_equal_width_mla_latent_tensors()
         fmt = KVCacheFormat.detect(
@@ -103,35 +103,35 @@ class TestKVCacheFormatDetect:
         assert fmt == KVCacheFormat.SEPARATE_KV
 
     def test_detect_mla_latent_without_two_groups_falls_back_to_mla_kv(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_mla_latent_tensors()
         fmt = KVCacheFormat.detect(kvcaches, dsa_two_groups=False)
         assert fmt == KVCacheFormat.MLA_KV
 
     def test_detect_dsa_index_with_two_groups(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_dsa_index_tensors()
         fmt = KVCacheFormat.detect(kvcaches, dsa_two_groups=True)
         assert fmt == KVCacheFormat.DSA_INDEX
 
     def test_detect_dsa_index_without_two_groups_falls_to_separate(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_dsa_index_tensors()
         fmt = KVCacheFormat.detect(kvcaches, dsa_two_groups=False)
         assert fmt == KVCacheFormat.SEPARATE_KV
 
     def test_detect_dsa_kv_legacy_bundled_with_two_groups(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_dsa_kv_tensors()
         fmt = KVCacheFormat.detect(kvcaches, dsa_two_groups=True)
         assert fmt == KVCacheFormat.DSA_KV
 
     def test_detect_dsa_kv_legacy_without_two_groups(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_dsa_kv_tensors()
         fmt = KVCacheFormat.detect(kvcaches, dsa_two_groups=False)
@@ -140,28 +140,28 @@ class TestKVCacheFormatDetect:
     # --- Regression: existing formats unchanged ---
 
     def test_regression_detect_mla_kv(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_mla_latent_tensors()
         fmt = KVCacheFormat.detect(kvcaches, dsa_two_groups=False)
         assert fmt == KVCacheFormat.MLA_KV
 
     def test_regression_detect_separate_kv(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_separate_kv_tensors()
         fmt = KVCacheFormat.detect(kvcaches, dsa_two_groups=False)
         assert fmt == KVCacheFormat.SEPARATE_KV
 
     def test_regression_detect_merged_kv_flash_attn(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         kvcaches = self._make_merged_kv_tensors()
         fmt = KVCacheFormat.detect(kvcaches, dsa_two_groups=False)
         assert fmt == KVCacheFormat.MERGED_KV
 
     def test_regression_detect_empty(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         assert KVCacheFormat.detect([], dsa_two_groups=True) == KVCacheFormat.UNDEFINED
         assert KVCacheFormat.detect([], dsa_two_groups=False) == KVCacheFormat.UNDEFINED
@@ -169,7 +169,7 @@ class TestKVCacheFormatDetect:
     # --- Format helper predicates ---
 
     def test_is_mla_format_includes_latent(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         assert KVCacheFormat.MLA_KV.is_mla_format()
         assert KVCacheFormat.MLA_LATENT.is_mla_format()
@@ -177,7 +177,7 @@ class TestKVCacheFormatDetect:
         assert not KVCacheFormat.DSA_INDEX.is_mla_format()
 
     def test_is_dsa_format_includes_index(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         assert KVCacheFormat.DSA_KV.is_dsa_format()
         assert KVCacheFormat.DSA_INDEX.is_dsa_format()
@@ -185,7 +185,7 @@ class TestKVCacheFormatDetect:
         assert not KVCacheFormat.MLA_LATENT.is_dsa_format()
 
     def test_kv_group_property(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         assert KVCacheFormat.MLA_KV.kv_group == 0
         assert KVCacheFormat.MLA_LATENT.kv_group == 0
@@ -193,7 +193,7 @@ class TestKVCacheFormatDetect:
         assert KVCacheFormat.DSA_INDEX.kv_group == 1
 
     def test_get_kv_size(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         assert KVCacheFormat.DSA_KV.get_kv_size() == 3
         assert KVCacheFormat.MLA_KV.get_kv_size() == 2
@@ -205,6 +205,7 @@ class TestKVCacheFormatDetect:
 # ---------------------------------------------------------------------------
 # SaveSpec tests
 # ---------------------------------------------------------------------------
+
 
 class TestSaveSpec:
     """Test SaveSpec per-group flags."""
@@ -220,8 +221,10 @@ class TestSaveSpec:
         from lmcache.integration.vllm.vllm_v1_adapter import SaveSpec
 
         spec = SaveSpec(
-            skip_leading_tokens=0, can_save=True,
-            can_save_latent=True, can_save_indexer=True,
+            skip_leading_tokens=0,
+            can_save=True,
+            can_save_latent=True,
+            can_save_indexer=True,
         )
         assert spec.can_save_latent is True
         assert spec.can_save_indexer is True
@@ -230,8 +233,10 @@ class TestSaveSpec:
         from lmcache.integration.vllm.vllm_v1_adapter import SaveSpec
 
         spec = SaveSpec(
-            skip_leading_tokens=0, can_save=False,
-            can_save_latent=True, can_save_indexer=True,
+            skip_leading_tokens=0,
+            can_save=False,
+            can_save_latent=True,
+            can_save_indexer=True,
         )
         assert spec.can_save is False
 
@@ -248,6 +253,7 @@ def _block_ids(num_tokens: int, block_size: int = 16) -> list[int]:
 # from_request_tracker decode-full-chunk rule tests
 # ---------------------------------------------------------------------------
 
+
 class TestFromRequestTrackerDecodeFullChunk:
     """Test the decode-full-chunk boundary rule in from_request_tracker."""
 
@@ -258,9 +264,7 @@ class TestFromRequestTrackerDecodeFullChunk:
             req_id="test_req",
             prompt_len=prompt_len,
             token_ids=(
-                list(range(num_saved, num_saved + 1))
-                if is_decode
-                else list(range(100))
+                list(range(num_saved, num_saved + 1)) if is_decode else list(range(100))
             ),
             allocated_block_ids=[0],
             num_saved_tokens=num_saved,
@@ -399,6 +403,7 @@ class TestFromRequestTrackerDecodeFullChunk:
 # store_layer _is_passive() guard tests
 # ---------------------------------------------------------------------------
 
+
 class TestStoreLayerPassiveGuard:
     """Test that store_layer skips on passive (non-rank-0) workers."""
 
@@ -468,7 +473,7 @@ def test_group_store_pointer_table_is_published_without_per_layer_copy() -> None
     cached_chunk_ptrs_npu: list[torch.Tensor | None] = []
     pointer_table = torch.tensor([[101], [202]], dtype=torch.long)
 
-    AscendLMCacheEngine._append_group_store_tensors(
+    LMCacheEngine._append_group_store_tensors(
         SimpleNamespace(),
         memory_objs,
         cached_tensors,
@@ -495,7 +500,7 @@ def test_group_store_page_publication_reuses_pointer_table_without_views() -> No
     cached_chunk_ptrs_npu: list[torch.Tensor | None] = []
     pointer_table = torch.tensor([[101], [202]], dtype=torch.long)
 
-    AscendLMCacheEngine._append_group_store_tensors(
+    LMCacheEngine._append_group_store_tensors(
         SimpleNamespace(),
         memory_objs,
         cached_tensors,
@@ -518,7 +523,7 @@ def test_retrieve_fallback_selects_page_layer_view() -> None:
     cached_tensors: list[list] = []
     engine = SimpleNamespace(gpu_connector=SimpleNamespace(), num_layers=2)
 
-    AscendLMCacheEngine._append_retrieve_layer_cache(
+    LMCacheEngine._append_retrieve_layer_cache(
         engine,
         1,
         [page],
@@ -534,15 +539,13 @@ def test_retrieve_fallback_selects_page_layer_view() -> None:
 
 def test_layer_cache_publication_rejects_missing_tensor() -> None:
     with pytest.raises(ValueError, match="Layerwise cache source has no tensor"):
-        AscendLMCacheEngine._layer_memory_tensor(
-            SimpleNamespace(tensor=None), 0
-        )
+        LMCacheEngine._layer_memory_tensor(SimpleNamespace(tensor=None), 0)
 
 
 class TestAscendStoreLayerCompletion:
     @staticmethod
     def _engine(*, stored: bool, allocation=None):
-        engine = MagicMock(spec=AscendLMCacheEngine)
+        engine = MagicMock(spec=LMCacheEngine)
         engine.config = MagicMock()
         engine.gpu_connector = MagicMock()
         engine.stats_monitor = MagicMock()
@@ -571,14 +574,14 @@ class TestAscendStoreLayerCompletion:
     def test_reports_fully_stored_prefix_as_committed(self):
         engine = self._engine(stored=True)
 
-        result = list(AscendLMCacheEngine.store_layer(engine, [0] * 256))[-1]
+        result = list(LMCacheEngine.store_layer(engine, [0] * 256))[-1]
 
         assert result.committed_end == 256
 
     def test_does_not_commit_after_allocation_failure(self):
         engine = self._engine(stored=False)
 
-        result = list(AscendLMCacheEngine.store_layer(engine, [0] * 256))[-1]
+        result = list(LMCacheEngine.store_layer(engine, [0] * 256))[-1]
 
         assert result.committed_end == 0
 
@@ -588,9 +591,7 @@ class TestAscendStoreLayerCompletion:
         engine.storage_manager.supports_batched_put_layer_pages.return_value = True
         engine.storage_manager.batched_put_layer_pages.return_value = []
         engine._shared_cpu_dtype_for_kv_group.return_value = torch.float16
-        engine._memory_format_for_kv_group.return_value = (
-            MemoryFormat.KV_DSA_INDEX_FMT
-        )
+        engine._memory_format_for_kv_group.return_value = MemoryFormat.KV_DSA_INDEX_FMT
         engine.gpu_connector.get_shape.return_value = torch.Size([256])
         key = CacheEngineKey("model", 1, 0, 0, torch.float16, kv_group=1)
         engine.token_database.process_tokens.return_value = iter(((0, 256, key),))
@@ -615,28 +616,22 @@ class TestAscendStoreLayerCompletion:
 
         engine.gpu_connector.batched_from_gpu.return_value = transfer()
         with (
+            patch("lmcache.v1.cache_engine.assert_layerwise_gpu_connector"),
             patch(
-                "lmcache_ascend.v1.cache_engine.assert_layerwise_gpu_connector"
-            ),
-            patch(
-                "lmcache_ascend.v1.cache_engine.mooncake_layer_pages_enabled",
+                "lmcache.v1.cache_engine.mooncake_layer_pages_enabled",
                 return_value=True,
             ),
             patch(
-                "lmcache_ascend.v1.cache_engine.mooncake_page_layout_enabled",
+                "lmcache.v1.cache_engine.mooncake_page_layout_enabled",
                 return_value=True,
             ),
         ):
-            result = list(
-                AscendLMCacheEngine.store_layer(engine, [0] * 256, kv_group=1)
-            )[-1]
+            result = list(LMCacheEngine.store_layer(engine, [0] * 256, kv_group=1))[-1]
 
         assert result.committed_end == 256
         allocations = local.batched_allocate_layer_pages.call_args_list
         assert len(allocations) == 2
-        assert allocations[0].kwargs[
-            "eviction"
-        ] is False
+        assert allocations[0].kwargs["eviction"] is False
         assert "eviction" not in allocations[1].kwargs
         engine.storage_manager.batched_allocate.assert_not_called()
         engine.storage_manager.batched_put_layer_pages.assert_called_once()
@@ -654,9 +649,7 @@ class TestAscendStoreLayerCompletion:
         engine.storage_manager.supports_batched_put_layer_pages.return_value = True
         engine.storage_manager.batched_put_layer_pages.return_value = []
         engine._shared_cpu_dtype_for_kv_group.return_value = torch.float16
-        engine._memory_format_for_kv_group.return_value = (
-            MemoryFormat.KV_DSA_INDEX_FMT
-        )
+        engine._memory_format_for_kv_group.return_value = MemoryFormat.KV_DSA_INDEX_FMT
         engine.gpu_connector.get_shape.return_value = torch.Size([256])
         keys = [
             CacheEngineKey("model", 1, 0, index, torch.float16, kv_group=1)
@@ -686,21 +679,17 @@ class TestAscendStoreLayerCompletion:
 
         engine.gpu_connector.batched_from_gpu.return_value = transfer()
         with (
+            patch("lmcache.v1.cache_engine.assert_layerwise_gpu_connector"),
             patch(
-                "lmcache_ascend.v1.cache_engine.assert_layerwise_gpu_connector"
-            ),
-            patch(
-                "lmcache_ascend.v1.cache_engine.mooncake_layer_pages_enabled",
+                "lmcache.v1.cache_engine.mooncake_layer_pages_enabled",
                 return_value=True,
             ),
             patch(
-                "lmcache_ascend.v1.cache_engine.mooncake_page_layout_enabled",
+                "lmcache.v1.cache_engine.mooncake_page_layout_enabled",
                 return_value=True,
             ),
         ):
-            result = list(
-                AscendLMCacheEngine.store_layer(engine, [0] * 300, kv_group=1)
-            )[-1]
+            result = list(LMCacheEngine.store_layer(engine, [0] * 300, kv_group=1))[-1]
 
         assert result.committed_end == 300
         allocation = local.batched_allocate_layer_pages.call_args
@@ -718,9 +707,7 @@ class TestAscendStoreLayerCompletion:
         engine.storage_manager.batched_put_layer_pages.return_value = []
         engine.storage_manager.batched_put.return_value = []
         engine._shared_cpu_dtype_for_kv_group.return_value = torch.float16
-        engine._memory_format_for_kv_group.return_value = (
-            MemoryFormat.KV_DSA_INDEX_FMT
-        )
+        engine._memory_format_for_kv_group.return_value = MemoryFormat.KV_DSA_INDEX_FMT
         engine.gpu_connector.get_shape.return_value = torch.Size([256])
         keys = [
             CacheEngineKey("model", 1, 0, index, torch.float16, kv_group=1)
@@ -761,21 +748,17 @@ class TestAscendStoreLayerCompletion:
 
         engine.gpu_connector.batched_from_gpu.return_value = transfer()
         with (
+            patch("lmcache.v1.cache_engine.assert_layerwise_gpu_connector"),
             patch(
-                "lmcache_ascend.v1.cache_engine.assert_layerwise_gpu_connector"
-            ),
-            patch(
-                "lmcache_ascend.v1.cache_engine.mooncake_layer_pages_enabled",
+                "lmcache.v1.cache_engine.mooncake_layer_pages_enabled",
                 return_value=True,
             ),
             patch(
-                "lmcache_ascend.v1.cache_engine.mooncake_page_layout_enabled",
+                "lmcache.v1.cache_engine.mooncake_page_layout_enabled",
                 return_value=True,
             ),
         ):
-            result = list(
-                AscendLMCacheEngine.store_layer(engine, [0] * 600, kv_group=1)
-            )[-1]
+            result = list(LMCacheEngine.store_layer(engine, [0] * 600, kv_group=1))[-1]
 
         assert result.committed_end == 600
         page_keys, submitted_pages = (
@@ -787,9 +770,7 @@ class TestAscendStoreLayerCompletion:
         assert legacy_keys == [keys[1].get_layer(0), keys[2].get_layer(0)]
         assert legacy_objs == legacy
         checks = engine._layerwise_chunk_fully_stored.call_args_list
-        assert all(
-            call.kwargs["allow_legacy_fallback"] is False for call in checks[:3]
-        )
+        assert all(call.kwargs["allow_legacy_fallback"] is False for call in checks[:3])
         assert all("allow_legacy_fallback" not in call.kwargs for call in checks[3:])
         for page in pages:
             page.ref_count_down()
@@ -800,8 +781,7 @@ class TestAscendStoreLayerCompletion:
         engine = self._engine(stored=False, allocation=[memory_obj])
         key = next(engine.token_database.process_tokens.return_value)[2]
         engine.token_database.process_tokens.return_value = iter(
-            (chunk * 256, (chunk + 1) * 256, key)
-            for chunk in range(32, 48)
+            (chunk * 256, (chunk + 1) * 256, key) for chunk in range(32, 48)
         )
 
         def transfer():
@@ -811,12 +791,8 @@ class TestAscendStoreLayerCompletion:
         engine.gpu_connector.batched_from_gpu.return_value = transfer()
         engine.storage_manager.batched_put.return_value = []
 
-        with patch(
-            "lmcache_ascend.v1.cache_engine.assert_layerwise_gpu_connector"
-        ):
-            result = list(
-                AscendLMCacheEngine.store_layer(engine, [0] * (48 * 256))
-            )[-1]
+        with patch("lmcache.v1.cache_engine.assert_layerwise_gpu_connector"):
+            result = list(LMCacheEngine.store_layer(engine, [0] * (48 * 256)))[-1]
 
         assert result.committed_end == 48 * 256
 
@@ -846,16 +822,14 @@ class TestAscendStoreLayerCompletion:
         engine = self._dispatch_engine([(0, 256, key, memory_obj)])
 
         with (
+            patch("lmcache.v1.cache_engine.assert_layerwise_gpu_connector"),
             patch(
-                "lmcache_ascend.v1.cache_engine.assert_layerwise_gpu_connector"
-            ),
-            patch(
-                "lmcache_ascend.v1.cache_engine.mooncake_page_layout_enabled",
+                "lmcache.v1.cache_engine.mooncake_page_layout_enabled",
                 return_value=False,
             ),
         ):
             list(
-                AscendLMCacheEngine.store_layer(
+                LMCacheEngine.store_layer(
                     engine,
                     [0] * 256,
                     decode_window_save=True,
@@ -880,16 +854,14 @@ class TestAscendStoreLayerCompletion:
         )
 
         with (
+            patch("lmcache.v1.cache_engine.assert_layerwise_gpu_connector"),
             patch(
-                "lmcache_ascend.v1.cache_engine.assert_layerwise_gpu_connector"
-            ),
-            patch(
-                "lmcache_ascend.v1.cache_engine.mooncake_page_layout_enabled",
+                "lmcache.v1.cache_engine.mooncake_page_layout_enabled",
                 return_value=False,
             ),
         ):
             list(
-                AscendLMCacheEngine.store_layer(
+                LMCacheEngine.store_layer(
                     engine,
                     [0] * 300,
                     all_layers_ready=True,
@@ -921,16 +893,14 @@ class TestAscendStoreLayerCompletion:
 
         engine.gpu_connector.batched_from_gpu.return_value = layerwise_transfer()
         with (
+            patch("lmcache.v1.cache_engine.assert_layerwise_gpu_connector"),
             patch(
-                "lmcache_ascend.v1.cache_engine.assert_layerwise_gpu_connector"
-            ),
-            patch(
-                "lmcache_ascend.v1.cache_engine.mooncake_page_layout_enabled",
+                "lmcache.v1.cache_engine.mooncake_page_layout_enabled",
                 return_value=False,
             ),
         ):
             list(
-                AscendLMCacheEngine.store_layer(
+                LMCacheEngine.store_layer(
                     engine,
                     [0] * 300,
                     decode_window_save=True,
@@ -956,7 +926,7 @@ def test_sparse_window_store_cache_publishes_only_full_chunks() -> None:
     cached_memory_objs: list[list] = []
     cached_tensors: list[list] = []
 
-    AscendLMCacheEngine._append_layerwise_store_cache_chunks(
+    LMCacheEngine._append_layerwise_store_cache_chunks(
         engine,
         keys=keys,
         starts=[0, 256],
@@ -969,7 +939,7 @@ def test_sparse_window_store_cache_publishes_only_full_chunks() -> None:
         cached_tensors=cached_tensors,
         cache_chunk_indices=[0],
     )
-    AscendLMCacheEngine._append_layer_store_tensors(
+    LMCacheEngine._append_layer_store_tensors(
         engine,
         0,
         memory_objs,
@@ -1011,7 +981,7 @@ def test_page_store_pointer_cache_does_not_rebuild_layer_views() -> None:
     )
     cached_tensors: list[list] = []
 
-    AscendLMCacheEngine._append_layer_store_tensors(
+    LMCacheEngine._append_layer_store_tensors(
         engine,
         0,
         [pages],
@@ -1035,18 +1005,16 @@ def test_full_chunk_successor_truncates_cached_partial_pointer_slot() -> None:
     cached_chunk_dev_ptrs = [[11, 22]]
     cached_chunk_ptrs_npu = [torch.tensor([11, 22], dtype=torch.long)]
 
-    replaced_at = (
-        AscendLMCacheEngine._truncate_store_cache_for_full_chunk_successor(
-            starts=cached_starts,
-            ends=cached_ends,
-            new_starts=[256],
-            new_ends=[512],
-            cached_keys=cached_keys,
-            cached_memory_objs=cached_memory_objs,
-            cached_tensors=cached_tensors,
-            cached_chunk_dev_ptrs=cached_chunk_dev_ptrs,
-            cached_chunk_ptrs_npu=cached_chunk_ptrs_npu,
-        )
+    replaced_at = LMCacheEngine._truncate_store_cache_for_full_chunk_successor(
+        starts=cached_starts,
+        ends=cached_ends,
+        new_starts=[256],
+        new_ends=[512],
+        cached_keys=cached_keys,
+        cached_memory_objs=cached_memory_objs,
+        cached_tensors=cached_tensors,
+        cached_chunk_dev_ptrs=cached_chunk_dev_ptrs,
+        cached_chunk_ptrs_npu=cached_chunk_ptrs_npu,
     )
 
     assert replaced_at == 1
@@ -1063,7 +1031,7 @@ class TestLayerwiseLayoutWarmup:
     """Layout-only warmup must not allocate dense staging buffers."""
 
     def test_layout_warmup_uses_no_staging_connector_api(self):
-        from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine
+        from lmcache.v1.cache_engine import LMCacheEngine
 
         engine = SimpleNamespace()
         connector = SimpleNamespace()
@@ -1085,7 +1053,7 @@ class TestLayerwiseLayoutWarmup:
         )
         engine.gpu_connector = connector
 
-        AscendLMCacheEngine._ensure_layerwise_connector_layout(
+        LMCacheEngine._ensure_layerwise_connector_layout(
             engine,
             kvcaches=connector.kvcaches,
             kv_group=1,
@@ -1104,12 +1072,13 @@ class TestLayerwiseLayoutWarmup:
 # Connector get_shape tests
 # ---------------------------------------------------------------------------
 
+
 class TestConnectorGetShape:
     """Test VLLMPagedMemLayerwiseNPUConnector.get_shape for new formats."""
 
     def _make_connector_with_format(self, kv_format):
         """Create a minimal connector-like object with get_shape logic."""
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         class FakeConnector:
             def __init__(self):
@@ -1131,8 +1100,7 @@ class TestConnectorGetShape:
                     return torch.Size([num_tokens * plane_elems])
                 if self.kv_format == KVCacheFormat.DSA_KV:
                     plane_elems = (
-                        self.k_hidden_dims + self.v_hidden_dims
-                        + self.dsa_hidden_dims
+                        self.k_hidden_dims + self.v_hidden_dims + self.dsa_hidden_dims
                     )
                     return torch.Size([num_tokens * plane_elems])
                 return torch.Size([num_tokens, 2, self.hidden_dim_size])
@@ -1140,7 +1108,7 @@ class TestConnectorGetShape:
         return FakeConnector()
 
     def test_get_shape_mla_latent(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn = self._make_connector_with_format(KVCacheFormat.MLA_LATENT)
         shape = conn.get_shape(256)
@@ -1148,7 +1116,7 @@ class TestConnectorGetShape:
         assert shape == torch.Size([147456])
 
     def test_get_shape_dsa_index(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn = self._make_connector_with_format(KVCacheFormat.DSA_INDEX)
         shape = conn.get_shape(256)
@@ -1157,7 +1125,7 @@ class TestConnectorGetShape:
 
     def test_get_shape_mla_latent_equals_mla_kv(self):
         """MLA_LATENT and MLA_KV produce the same plane structure."""
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn_latent = self._make_connector_with_format(KVCacheFormat.MLA_LATENT)
         conn_mla = self._make_connector_with_format(KVCacheFormat.MLA_KV)
@@ -1165,7 +1133,7 @@ class TestConnectorGetShape:
 
     def test_get_shape_dsa_index_smaller_than_dsa_kv(self):
         """DSA_INDEX is single-plane, DSA_KV is 3-plane."""
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn_index = self._make_connector_with_format(KVCacheFormat.DSA_INDEX)
         conn_dsa = self._make_connector_with_format(KVCacheFormat.DSA_KV)
@@ -1176,14 +1144,14 @@ class TestConnectorGetShape:
     # --- Regression ---
 
     def test_regression_get_shape_mla_kv(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn = self._make_connector_with_format(KVCacheFormat.MLA_KV)
         shape = conn.get_shape(256)
         assert shape == torch.Size([256 * 576])
 
     def test_regression_get_shape_dsa_kv(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn = self._make_connector_with_format(KVCacheFormat.DSA_KV)
         shape = conn.get_shape(256)
@@ -1194,10 +1162,10 @@ class TestConnectorGetShape:
 # Format helper predicate tests (Ascend connector)
 # ---------------------------------------------------------------------------
 
-class TestConnectorFormatHelpers:
 
+class TestConnectorFormatHelpers:
     def test_is_mla_dsa_includes_new_formats(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         for fmt in [
             KVCacheFormat.MLA_KV,
@@ -1208,14 +1176,14 @@ class TestConnectorFormatHelpers:
             assert fmt.is_tuple_format()
 
     def test_is_mla_latent_format(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         assert KVCacheFormat.MLA_LATENT.is_mla_latent_format()
         assert not KVCacheFormat.MLA_KV.is_mla_latent_format()
         assert not KVCacheFormat.DSA_INDEX.is_mla_latent_format()
 
     def test_is_dsa_index_format(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         assert KVCacheFormat.DSA_INDEX.is_dsa_index_format()
         assert not KVCacheFormat.DSA_KV.is_dsa_index_format()
@@ -1226,16 +1194,27 @@ class TestConnectorFormatHelpers:
 # Integration test: two-group key separation
 # ---------------------------------------------------------------------------
 
+
 class TestTwoGroupKeySeparation:
     """Integration test: latent and indexer keys are in disjoint key spaces."""
 
     def test_latent_and_indexer_keys_in_disjoint_spaces(self):
         """The same chunk_hash produces different keys for kv_group=0 vs 1."""
         k_latent = CacheEngineKey(
-            "model", 1, 0, 42, torch.bfloat16, kv_group=0,
+            "model",
+            1,
+            0,
+            42,
+            torch.bfloat16,
+            kv_group=0,
         )
         k_indexer = CacheEngineKey(
-            "model", 1, 0, 42, torch.bfloat16, kv_group=1,
+            "model",
+            1,
+            0,
+            42,
+            torch.bfloat16,
+            kv_group=1,
         )
         assert k_latent != k_indexer
         assert hash(k_latent) != hash(k_indexer)
@@ -1288,8 +1267,13 @@ class TestTwoGroupKeySeparation:
         """to_string → from_string roundtrip preserves kv_group for both groups."""
         for kv_group in [0, 1]:
             key = LayerCacheEngineKey(
-                "model", 2, 0, 99, torch.bfloat16,
-                layer_id=7, kv_group=kv_group,
+                "model",
+                2,
+                0,
+                99,
+                torch.bfloat16,
+                layer_id=7,
+                kv_group=kv_group,
             )
             s = key.to_string()
             parsed = LayerCacheEngineKey.from_string(s)
@@ -1301,6 +1285,7 @@ class TestTwoGroupKeySeparation:
 # ---------------------------------------------------------------------------
 # Per-kv_group lazy init on the real layerwise connector
 # ---------------------------------------------------------------------------
+
 
 class TestPerGroupLazyInit:
     """Real VLLMPagedMemLayerwiseNPUConnector: _lazy_initialize_buffer must
@@ -1317,7 +1302,7 @@ class TestPerGroupLazyInit:
         chunk_size: int = 64,
         max_staging_tokens: int = 0,
     ):
-        from lmcache_ascend.v1.npu_connector.npu_connectors import (
+        from lmcache.v1.npu_connector.npu_connectors import (
             VLLMPagedMemLayerwiseNPUConnector,
         )
 
@@ -1353,7 +1338,7 @@ class TestPerGroupLazyInit:
         return [(indexer,) for _ in range(num_layers)]
 
     def test_latent_then_indexer_detects_both(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn = self._make_connector()
         conn._lazy_initialize_buffer(self._latent_kvcaches(), kv_group=0)
@@ -1367,7 +1352,7 @@ class TestPerGroupLazyInit:
         assert conn.get_shape(256, kv_group=0) != conn.get_shape(256, kv_group=1)
 
     def test_tp8_equal_width_latent_still_uses_mla_direct_layout(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn = self._make_connector()
         conn._lazy_initialize_buffer(
@@ -1385,7 +1370,7 @@ class TestPerGroupLazyInit:
         assert conn.get_shape(256, kv_group=0) == torch.Size([256 * 256])
 
     def test_indexer_then_latent_detects_both(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn = self._make_connector()
         conn._lazy_initialize_buffer(self._indexer_kvcaches(), kv_group=1)
@@ -1397,7 +1382,7 @@ class TestPerGroupLazyInit:
         assert conn.get_shape(256, kv_group=1) == torch.Size([256 * 128])
 
     def test_re_init_same_group_is_idempotent(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn = self._make_connector()
         conn._lazy_initialize_buffer(self._latent_kvcaches(), kv_group=0)
@@ -1408,7 +1393,7 @@ class TestPerGroupLazyInit:
         assert first.kv_format == KVCacheFormat.MLA_LATENT
 
     def test_mirrored_attrs_track_current_group(self):
-        from lmcache_ascend.v1.kv_format import KVCacheFormat
+        from lmcache.v1.kv_format import KVCacheFormat
 
         conn = self._make_connector()
         conn._lazy_initialize_buffer(self._latent_kvcaches(), kv_group=0)
@@ -1483,7 +1468,7 @@ class TestPerGroupLazyInit:
             return object()
 
         with patch(
-            "lmcache_ascend.v1.npu_connector.npu_connectors.prepare_sparse_direct_layer_state",
+            "lmcache.v1.npu_connector.npu_connectors.prepare_sparse_direct_layer_state",
             side_effect=_capture_prepare,
         ):
             conn.kvcaches = latent
@@ -1559,7 +1544,7 @@ class TestPerGroupLazyInit:
 
     def test_from_metadata_wires_max_staging_tokens(self) -> None:
         from lmcache.v1.metadata import LMCacheMetadata
-        from lmcache_ascend.v1.npu_connector.npu_connectors import (
+        from lmcache.v1.npu_connector.npu_connectors import (
             VLLMPagedMemLayerwiseNPUConnector,
         )
 
@@ -1684,6 +1669,7 @@ class TestPerGroupLazyInit:
 # Adapter per-group kv_caches split + dual store/retrieve plumbing
 # ---------------------------------------------------------------------------
 
+
 def _adapter_method(name):
     """Return the unbound adapter method for calling on a fake instance."""
     from lmcache.integration.vllm.vllm_v1_adapter import LMCacheConnectorV1Impl
@@ -1693,19 +1679,19 @@ def _adapter_method(name):
 
 def _ascend_adapter_method(name):
     """Return the unbound Ascend adapter method for calling on a fake instance."""
-    from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
-        LMCacheAscendConnectorV1Impl,
+    from lmcache.integration.vllm.vllm_v1_adapter import (
+        LMCacheConnectorV1Impl,
     )
 
-    return getattr(LMCacheAscendConnectorV1Impl, name)
+    return getattr(LMCacheConnectorV1Impl, name)
 
 
 def _ascend_adapter_fake(**attrs):
-    from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
-        LMCacheAscendConnectorV1Impl,
+    from lmcache.integration.vllm.vllm_v1_adapter import (
+        LMCacheConnectorV1Impl,
     )
 
-    fake = object.__new__(LMCacheAscendConnectorV1Impl)
+    fake = object.__new__(LMCacheConnectorV1Impl)
     fake._finished_req_ids_waiting_for_save = set()
     fake._late_finished_sending = set()
     fake._direct_store_observed_layers = set()
@@ -1723,8 +1709,8 @@ def _ascend_adapter_fake(**attrs):
 class TestAscendAdapterInitialization:
     @staticmethod
     def _construct(role, kv_role):
-        from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
-            LMCacheAscendConnectorV1Impl,
+        from lmcache.integration.vllm.vllm_v1_adapter import (
+            LMCacheConnectorV1Impl,
         )
 
         def base_init(adapter, *_args, **_kwargs):
@@ -1732,9 +1718,9 @@ class TestAscendAdapterInitialization:
             adapter.use_layerwise = True
             adapter.kv_role = kv_role
 
-        generic_base = LMCacheAscendConnectorV1Impl.__mro__[1]
+        generic_base = LMCacheConnectorV1Impl.__mro__[1]
         with patch.object(generic_base, "__init__", base_init):
-            return LMCacheAscendConnectorV1Impl(
+            return LMCacheConnectorV1Impl(
                 SimpleNamespace(),
                 role,
                 SimpleNamespace(),
@@ -1768,8 +1754,8 @@ class TestAscendAdapterInitialization:
             self._construct(KVConnectorRole.WORKER, "kv_producer")
 
     def test_old_base_without_latent_capability_fails_closed(self):
-        from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
-            LMCacheAscendConnectorV1Impl,
+        from lmcache.integration.vllm.vllm_v1_adapter import (
+            LMCacheConnectorV1Impl,
         )
         from vllm.distributed.kv_transfer.kv_connector.v1.base import (
             KVConnectorRole,
@@ -1783,16 +1769,16 @@ class TestAscendAdapterInitialization:
             adapter.use_layerwise = True
             adapter.kv_role = "kv_consumer"
 
-        generic_base = LMCacheAscendConnectorV1Impl.__mro__[1]
+        generic_base = LMCacheConnectorV1Impl.__mro__[1]
         with (
             patch.object(generic_base, "__init__", base_init),
             patch.object(
-                LMCacheAscendConnectorV1Impl,
+                LMCacheConnectorV1Impl,
                 "supports_dsa_live_latent_split",
                 None,
             ),
         ):
-            adapter = LMCacheAscendConnectorV1Impl(
+            adapter = LMCacheConnectorV1Impl(
                 SimpleNamespace(),
                 KVConnectorRole.WORKER,
                 SimpleNamespace(),
@@ -1801,8 +1787,8 @@ class TestAscendAdapterInitialization:
         assert adapter._live_latent_split_requested is False
 
     def test_latent_source_requires_explicit_transport_negotiation(self):
-        from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
-            LMCacheAscendConnectorV1Impl,
+        from lmcache.integration.vllm.vllm_v1_adapter import (
+            LMCacheConnectorV1Impl,
         )
         from vllm.distributed.kv_transfer.kv_connector.v1.base import (
             KVConnectorRole,
@@ -1816,16 +1802,16 @@ class TestAscendAdapterInitialization:
             adapter.use_layerwise = True
             adapter.kv_role = "kv_consumer"
 
-        generic_base = LMCacheAscendConnectorV1Impl.__mro__[1]
+        generic_base = LMCacheConnectorV1Impl.__mro__[1]
         with (
             patch.object(generic_base, "__init__", base_init),
             patch.object(
-                LMCacheAscendConnectorV1Impl,
+                LMCacheConnectorV1Impl,
                 "supports_dsa_live_latent_split",
                 return_value=True,
             ),
         ):
-            adapter = LMCacheAscendConnectorV1Impl(
+            adapter = LMCacheConnectorV1Impl(
                 SimpleNamespace(),
                 KVConnectorRole.WORKER,
                 SimpleNamespace(),
@@ -1844,7 +1830,7 @@ def test_direct_prefill_uses_window_relative_save_mappings() -> None:
     mapping_calls = []
     engine = SimpleNamespace(
         direct_prefill_store_enabled=lambda: True,
-        store_direct_prefill=lambda *args, **kwargs: calls.append((args, kwargs))
+        store_direct_prefill=lambda *args, **kwargs: calls.append((args, kwargs)),
     )
     adapter = SimpleNamespace(
         lmcache_engine=engine,
@@ -1874,9 +1860,7 @@ def test_direct_prefill_uses_window_relative_save_mappings() -> None:
         is_last_prefill=False,
     )
 
-    _ascend_adapter_method("_submit_direct_prefill_requests")(
-        adapter, [request]
-    )
+    _ascend_adapter_method("_submit_direct_prefill_requests")(adapter, [request])
 
     assert calls[0][0][3] == {
         0: "window-latent",
@@ -1887,19 +1871,13 @@ def test_direct_prefill_uses_window_relative_save_mappings() -> None:
     assert calls[0][1]["accepted_store_end"] == 512
 
     request.load_spec = SimpleNamespace(lmcache_cached_tokens=256)
-    _ascend_adapter_method("_submit_direct_prefill_requests")(
-        adapter, [request]
-    )
+    _ascend_adapter_method("_submit_direct_prefill_requests")(adapter, [request])
     assert calls[-1][1]["verified_prefix_end"] == 256
 
-    adapter._windowed_sparse_save_mapping = (
-        lambda request, group, base: None
-        if group
-        else request.save_slot_mapping[0]
+    adapter._windowed_sparse_save_mapping = lambda request, group, base: (
+        None if group else request.save_slot_mapping[0]
     )
-    _ascend_adapter_method("_submit_direct_prefill_requests")(
-        adapter, [request]
-    )
+    _ascend_adapter_method("_submit_direct_prefill_requests")(adapter, [request])
     assert calls[-1][0][3] == {0: "full-latent", 1: "full-indexer"}
     assert calls[-1][1]["slot_mapping_base"] == 0
 
@@ -1907,22 +1885,16 @@ def test_direct_prefill_uses_window_relative_save_mappings() -> None:
     adapter._windowed_sparse_save_mapping = lambda request, group, base: (
         mapping_calls.append(group) or request.save_indexer_slot_mapping[0]
     )
-    request.save_spec = SimpleNamespace(
-        can_save_latent=False, can_save_indexer=True
-    )
+    request.save_spec = SimpleNamespace(can_save_latent=False, can_save_indexer=True)
     request.save_slot_mapping = []
-    _ascend_adapter_method("_submit_direct_prefill_requests")(
-        adapter, [request]
-    )
+    _ascend_adapter_method("_submit_direct_prefill_requests")(adapter, [request])
     assert mapping_calls == [1]
     assert calls[-1][0][2] == {1: ["cache-1"]}
 
 
 def test_finish_save_batch_submits_nonfinal_direct_window() -> None:
     request = SimpleNamespace(req_id="request", is_last_prefill=False)
-    result = LayerwiseStoreResult(
-        request_id="request", committed_end=128
-    )
+    result = LayerwiseStoreResult(request_id="request", committed_end=128)
     calls = []
     adapter = SimpleNamespace(
         kv_role="kv_both",
@@ -1967,9 +1939,7 @@ def test_finish_save_batch_preserves_final_attention_producer_event() -> None:
         kv_role="kv_both",
         lmcache_engine=SimpleNamespace(
             wait_for_pending_sync_stores=lambda: None,
-            wait_for_direct_stores=lambda req_ids: waited.append(
-                set(req_ids)
-            ),
+            wait_for_direct_stores=lambda req_ids: waited.append(set(req_ids)),
             direct_store_committed_ends=lambda _req_id: {},
         ),
         _completed_layerwise_stores={},
@@ -1980,9 +1950,7 @@ def test_finish_save_batch_preserves_final_attention_producer_event() -> None:
             )
         ),
         _latest_live_source_ready_event=event,
-        _latest_live_source_ready_event_source=(
-            "attn_metadata.reshape_cache_event"
-        ),
+        _latest_live_source_ready_event_source=("attn_metadata.reshape_cache_event"),
         _mark_prefill_committed=lambda req: marked.append(req.req_id),
     )
 
@@ -1994,9 +1962,7 @@ def test_finish_save_batch_preserves_final_attention_producer_event() -> None:
             set(),
             {
                 "source_ready_event": event,
-                "source_ready_event_source": (
-                    "attn_metadata.reshape_cache_event"
-                ),
+                "source_ready_event_source": ("attn_metadata.reshape_cache_event"),
             },
         )
     ]
@@ -2111,7 +2077,7 @@ def test_live_source_event_is_fenced_before_descriptor_drain(monkeypatch) -> Non
             return {"request": descriptor}
 
     module = __import__(
-        "lmcache_ascend.integration.vllm.vllm_v1_adapter",
+        "lmcache.integration.vllm.vllm_v1_adapter",
         fromlist=["_LiveSourceReadyFence"],
     )
     monkeypatch.setattr(module, "npu_content_diagnostics_enabled", lambda: True)
@@ -2159,9 +2125,7 @@ def test_source_readiness_query_precedes_descriptor_finalize(monkeypatch) -> Non
     engine = SimpleNamespace(
         begin_live_source_descriptor=lambda *_args: calls.append("begin"),
         capture_live_source_step=lambda *_args: calls.append("capture"),
-        finalize_live_source_descriptor=lambda *_args: (
-            calls.append("finalize") or True
-        ),
+        finalize_live_source_descriptor=lambda *_args: calls.append("finalize") or True,
         direct_prefill_store_enabled=lambda: False,
     )
     adapter = _ascend_adapter_fake(
@@ -2187,13 +2151,11 @@ def test_source_readiness_query_precedes_descriptor_finalize(monkeypatch) -> Non
         is_last_prefill=True,
     )
     monkeypatch.setattr(
-        "lmcache_ascend.integration.vllm.vllm_v1_adapter."
-        "npu_content_diagnostics_enabled",
+        "lmcache.integration.vllm.vllm_v1_adapter.npu_content_diagnostics_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "lmcache_ascend.integration.vllm.vllm_v1_adapter."
-        "get_tensor_model_parallel_rank",
+        "lmcache.integration.vllm.vllm_v1_adapter.get_tensor_model_parallel_rank",
         lambda: 0,
     )
 
@@ -2219,7 +2181,7 @@ def test_post_fence_source_fingerprint_is_attached_to_wire_descriptor(
         return fingerprint
 
     monkeypatch.setattr(
-        "lmcache_ascend.v1.cache_engine.fingerprint_compact_group1",
+        "lmcache.v1.cache_engine.fingerprint_compact_group1",
         fake_fingerprint,
     )
     descriptor = {"tp_rank": 0, "dp_rank": 1}
@@ -2239,7 +2201,7 @@ def test_post_fence_source_fingerprint_is_attached_to_wire_descriptor(
         _completed_live_sources={"request": descriptor},
     )
 
-    AscendLMCacheEngine.finalize_live_source_readiness(engine, ["request"])
+    LMCacheEngine.finalize_live_source_readiness(engine, ["request"])
 
     assert calls[0]["event"] == "group1_source_post_fence_fingerprint"
     assert calls[0]["token_count"] == 17
@@ -2256,10 +2218,10 @@ def test_descriptor_drain_rejects_unfenced_diagnostic_source() -> None:
     )
 
     with pytest.raises(RuntimeError, match="before their post-fence"):
-        AscendLMCacheEngine.drain_live_source_descriptors(engine)
+        LMCacheEngine.drain_live_source_descriptors(engine)
 
     engine._pending_live_source_diagnostics.clear()
-    assert AscendLMCacheEngine.drain_live_source_descriptors(engine) == {
+    assert LMCacheEngine.drain_live_source_descriptors(engine) == {
         "request": descriptor
     }
 
@@ -2273,7 +2235,7 @@ def test_discard_live_source_keeps_persistent_store_state() -> None:
         _direct_store_states={"request": direct_state},
     )
 
-    AscendLMCacheEngine.discard_live_source_descriptor(engine, "request")
+    LMCacheEngine.discard_live_source_descriptor(engine, "request")
 
     assert engine._live_source_builders == {}
     assert engine._completed_live_sources == {}
@@ -2289,7 +2251,7 @@ def test_group1_direct_store_rejects_current_stream_event_fallback() -> None:
     )
 
     with pytest.raises(RuntimeError, match="no attention producer event"):
-        AscendLMCacheEngine._direct_source_ready_event(
+        LMCacheEngine._direct_source_ready_event(
             state,
             128,
             require_producer_event=True,
@@ -2306,7 +2268,7 @@ def test_direct_store_retains_causal_join_through_exact_token_frontier() -> None
         source_ready_events_token_end=0,
     )
 
-    AscendLMCacheEngine._remember_direct_source_readiness(
+    LMCacheEngine._remember_direct_source_readiness(
         state,
         1024,
         event,
@@ -2316,10 +2278,8 @@ def test_direct_store_retains_causal_join_through_exact_token_frontier() -> None
 
     assert state.source_ready_events == (event,)
     assert state.source_ready_events_token_end == 1024
-    assert AscendLMCacheEngine._direct_source_ready_events(state, 1024) == (
-        event,
-    )
-    assert AscendLMCacheEngine._direct_source_ready_events(state, 1025) == ()
+    assert LMCacheEngine._direct_source_ready_events(state, 1024) == (event,)
+    assert LMCacheEngine._direct_source_ready_events(state, 1025) == ()
 
 
 def test_singleton_readiness_does_not_claim_complete_remote_fill_fence() -> None:
@@ -2332,7 +2292,7 @@ def test_singleton_readiness_does_not_claim_complete_remote_fill_fence() -> None
         source_ready_events_token_end=0,
     )
 
-    AscendLMCacheEngine._remember_direct_source_readiness(
+    LMCacheEngine._remember_direct_source_readiness(
         state,
         1024,
         event,
@@ -2341,7 +2301,7 @@ def test_singleton_readiness_does_not_claim_complete_remote_fill_fence() -> None
 
     assert state.source_ready_event is event
     assert state.source_ready_token_end == 1024
-    assert AscendLMCacheEngine._direct_source_ready_events(state, 1024) == ()
+    assert LMCacheEngine._direct_source_ready_events(state, 1024) == ()
 
 
 def test_save_layer_carries_final_indexer_producer_event() -> None:
@@ -2361,9 +2321,7 @@ def test_save_layer_carries_final_indexer_producer_event() -> None:
         _latest_live_source_ready_event_source="missing",
     )
     metadata = {
-        "model.layers.0.self_attn.attn": SimpleNamespace(
-            reshape_cache_event=event
-        )
+        "model.layers.0.self_attn.attn": SimpleNamespace(reshape_cache_event=event)
     }
 
     _ascend_adapter_method("save_kv_layer")(
@@ -2469,12 +2427,8 @@ def test_source_ready_event_uses_matching_layer_metadata() -> None:
 def test_source_ready_event_resolves_unbundled_indexer_sibling() -> None:
     expected = object()
     metadata = {
-        "model.layers.0.self_attn.attn": SimpleNamespace(
-            reshape_cache_event=expected
-        ),
-        "model.layers.1.self_attn.attn": SimpleNamespace(
-            reshape_cache_event=object()
-        ),
+        "model.layers.0.self_attn.attn": SimpleNamespace(reshape_cache_event=expected),
+        "model.layers.1.self_attn.attn": SimpleNamespace(reshape_cache_event=object()),
     }
 
     source_event = _ascend_adapter_method("_source_ready_event")
@@ -2489,12 +2443,8 @@ def test_source_ready_event_resolves_unbundled_indexer_sibling() -> None:
 
 def test_source_ready_event_rejects_ambiguous_indexer_sibling() -> None:
     metadata = {
-        "model.layers.0.self_attn.attn": SimpleNamespace(
-            reshape_cache_event=object()
-        ),
-        "model.layers.0.self_attn.mla": SimpleNamespace(
-            reshape_cache_event=object()
-        ),
+        "model.layers.0.self_attn.attn": SimpleNamespace(reshape_cache_event=object()),
+        "model.layers.0.self_attn.mla": SimpleNamespace(reshape_cache_event=object()),
     }
 
     source_event = _ascend_adapter_method("_source_ready_event")
@@ -2529,9 +2479,7 @@ def test_final_live_source_without_producer_event_fails_to_persistent_only(
 ) -> None:
     calls = []
     engine = SimpleNamespace(
-        discard_live_source_descriptor=lambda req_id: calls.append(
-            ("discard", req_id)
-        ),
+        discard_live_source_descriptor=lambda req_id: calls.append(("discard", req_id)),
         begin_live_source_descriptor=lambda *_args: pytest.fail(
             "unfenced live descriptor was started"
         ),
@@ -2566,14 +2514,11 @@ def test_final_live_source_without_producer_event_fails_to_persistent_only(
     )
     diagnostic_events = []
     monkeypatch.setattr(
-        "lmcache_ascend.integration.vllm.vllm_v1_adapter."
-        "log_npu_content_diagnostic_event",
+        "lmcache.integration.vllm.vllm_v1_adapter.log_npu_content_diagnostic_event",
         lambda event, **fields: diagnostic_events.append((event, fields)),
     )
 
-    _ascend_adapter_method("_submit_direct_prefill_requests")(
-        adapter, [request]
-    )
+    _ascend_adapter_method("_submit_direct_prefill_requests")(adapter, [request])
 
     assert calls == [
         ("discard", "request"),
@@ -2606,12 +2551,8 @@ def test_deferred_live_store_failure_does_not_block_other_requests() -> None:
     engine = SimpleNamespace(
         store_direct_prefill=finalize,
         direct_store_committed_ends=lambda _req_id: {},
-        drop_direct_store_states=lambda req_ids: calls.append(
-            ("drop", set(req_ids))
-        ),
-        wait_for_pending_stores=lambda req_ids: calls.append(
-            ("wait", set(req_ids))
-        ),
+        drop_direct_store_states=lambda req_ids: calls.append(("drop", set(req_ids))),
+        wait_for_pending_stores=lambda req_ids: calls.append(("wait", set(req_ids))),
         get_finished_stores=lambda _req_ids: {"good"},
     )
     adapter = _ascend_adapter_fake(
@@ -2648,17 +2589,16 @@ def test_deferred_live_store_failure_does_not_block_other_requests() -> None:
 
 
 def test_finished_live_store_is_fenced_before_report_and_commit() -> None:
-    request = SimpleNamespace(
-        req_id="request", token_ids=[1, 2], request_configs=None
-    )
+    request = SimpleNamespace(req_id="request", token_ids=[1, 2], request_configs=None)
     calls = []
     engine = SimpleNamespace(
         store_direct_prefill=lambda *args, **kwargs: calls.append(
             ("finalize", args[0])
         ),
         direct_store_committed_ends=lambda _req_id: {0: 128, 1: 128},
-        get_finished_stores=lambda req_ids: calls.append(("poll", set(req_ids)))
-        or {"request"},
+        get_finished_stores=lambda req_ids: (
+            calls.append(("poll", set(req_ids))) or {"request"}
+        ),
         drop_direct_store_states=lambda req_ids: calls.append(("drop", set(req_ids))),
     )
     adapter = _ascend_adapter_fake(
@@ -2695,9 +2635,7 @@ def test_finish_save_batch_discards_adoption_after_store_failure() -> None:
 
     adapter = SimpleNamespace(
         kv_role="kv_both",
-        lmcache_engine=SimpleNamespace(
-            wait_for_pending_sync_stores=fail_wait
-        ),
+        lmcache_engine=SimpleNamespace(wait_for_pending_sync_stores=fail_wait),
         _completed_layerwise_stores={
             ("request", 0): LayerwiseStoreResult(
                 request_id="request", committed_end=128
@@ -2768,9 +2706,7 @@ def test_adopted_direct_store_still_captures_live_source() -> None:
         _refresh_kvcaches_list=lambda: None,
         _kvcaches_for_group=lambda group: [f"cache-{group}"],
         _windowed_sparse_save_mapping=lambda request, group, base: (
-            request.indexer_slot_mapping[0]
-            if group
-            else request.slot_mapping[0]
+            request.indexer_slot_mapping[0] if group else request.slot_mapping[0]
         ),
     )
     request = SimpleNamespace(
@@ -2836,9 +2772,7 @@ def test_preferred_group0_store_is_fenced_before_group1_live_publish() -> None:
         live_source_indexer_slot_mapping=["live-indexer"],
         live_source_requested=True,
         load_spec=None,
-        request_configs={
-            "lmcache.mooncake_preferred_segment": "decoder-tp0:12345"
-        },
+        request_configs={"lmcache.mooncake_preferred_segment": "decoder-tp0:12345"},
         is_last_prefill=True,
     )
 
@@ -2895,8 +2829,7 @@ def test_unqualified_remote_fill_fences_final_live_persistence(monkeypatch) -> N
         _lmcache_remote_fill_qualified=False,
     )
     monkeypatch.setattr(
-        "lmcache_ascend.integration.vllm.vllm_v1_adapter."
-        "get_tensor_model_parallel_rank",
+        "lmcache.integration.vllm.vllm_v1_adapter.get_tensor_model_parallel_rank",
         lambda: 0,
     )
 
@@ -2939,9 +2872,7 @@ def test_final_group1_only_rank_fences_persistence() -> None:
         live_source_indexer_slot_mapping=["live-indexer"],
         live_source_requested=True,
         load_spec=None,
-        request_configs={
-            "lmcache.mooncake_preferred_segment": "decoder-tp0:12345"
-        },
+        request_configs={"lmcache.mooncake_preferred_segment": "decoder-tp0:12345"},
         is_last_prefill=True,
     )
 
@@ -2969,9 +2900,7 @@ def test_enabled_live_latent_source_is_tp0_only(monkeypatch) -> None:
         _refresh_kvcaches_list=lambda: None,
         _kvcaches_for_group=lambda group: [f"cache-{group}"],
         _windowed_sparse_save_mapping=lambda request, group, _base: (
-            request.indexer_slot_mapping[0]
-            if group
-            else request.slot_mapping[0]
+            request.indexer_slot_mapping[0] if group else request.slot_mapping[0]
         ),
         _live_latent_split_requested=True,
     )
@@ -2988,25 +2917,19 @@ def test_enabled_live_latent_source_is_tp0_only(monkeypatch) -> None:
         is_last_prefill=False,
     )
     monkeypatch.setattr(
-        "lmcache_ascend.integration.vllm.vllm_v1_adapter."
-        "get_tensor_model_parallel_rank",
+        "lmcache.integration.vllm.vllm_v1_adapter.get_tensor_model_parallel_rank",
         lambda: 0,
     )
 
-    _ascend_adapter_method("_submit_direct_prefill_requests")(
-        adapter, [request]
-    )
+    _ascend_adapter_method("_submit_direct_prefill_requests")(adapter, [request])
     assert calls == [("request", (0, 1))]
 
     calls.clear()
     monkeypatch.setattr(
-        "lmcache_ascend.integration.vllm.vllm_v1_adapter."
-        "get_tensor_model_parallel_rank",
+        "lmcache.integration.vllm.vllm_v1_adapter.get_tensor_model_parallel_rank",
         lambda: 1,
     )
-    _ascend_adapter_method("_submit_direct_prefill_requests")(
-        adapter, [request]
-    )
+    _ascend_adapter_method("_submit_direct_prefill_requests")(adapter, [request])
     assert calls == [("request", (1,))]
 
 
@@ -3070,9 +2993,7 @@ def test_live_source_fails_closed_for_context_parallel(caplog) -> None:
         _refresh_kvcaches_list=lambda: None,
         _kvcaches_for_group=lambda group: [f"cache-{group}"],
         _windowed_sparse_save_mapping=lambda request, group, base: (
-            request.indexer_slot_mapping[0]
-            if group
-            else request.slot_mapping[0]
+            request.indexer_slot_mapping[0] if group else request.slot_mapping[0]
         ),
     )
     request = SimpleNamespace(
@@ -3300,19 +3221,20 @@ def _adapter_remote_fill_request_configs() -> dict:
 
 
 def test_remote_fill_persistence_selects_group1_decoder_segment() -> None:
-    from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
+    from lmcache.integration.vllm.vllm_v1_adapter import (
         _prepare_remote_fill_persistent_placement,
     )
+
     request_configs = _adapter_remote_fill_request_configs()
     request_configs["lmcache.mooncake_preferred_segment"] = "decoder-host"
 
-    assert _prepare_remote_fill_persistent_placement(
-        request_configs, group1_direct_hbm=True
-    ) is True
     assert (
-        request_configs["lmcache.mooncake_preferred_segment"]
-        == "decoder-host"
+        _prepare_remote_fill_persistent_placement(
+            request_configs, group1_direct_hbm=True
+        )
+        is True
     )
+    assert request_configs["lmcache.mooncake_preferred_segment"] == "decoder-host"
     assert request_configs["lmcache.mooncake_preferred_kv_group"] == 1
 
     legacy = _adapter_remote_fill_request_configs()
@@ -3327,13 +3249,11 @@ def test_remote_fill_persistence_selects_group1_decoder_segment() -> None:
 
 
 def test_group1_direct_persistence_requires_decoder_segment() -> None:
-    from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
+    from lmcache.integration.vllm.vllm_v1_adapter import (
         _prepare_remote_fill_persistent_placement,
     )
 
-    with pytest.raises(
-        ValueError, match="requires a decoder-local Mooncake segment"
-    ):
+    with pytest.raises(ValueError, match="requires a decoder-local Mooncake segment"):
         _prepare_remote_fill_persistent_placement(
             _adapter_remote_fill_request_configs(), group1_direct_hbm=True
         )
@@ -3342,9 +3262,7 @@ def test_group1_direct_persistence_requires_decoder_segment() -> None:
 def test_remote_fill_disabled_preserves_legacy_group_selection() -> None:
     request_configs = _adapter_remote_fill_request_configs()
     request_configs["lmcache.remote_fill"]["transfer_id"] = "stale-transfer"
-    request_configs["lmcache.mooncake_preferred_segment"] = (
-        "legacy-decoder-host"
-    )
+    request_configs["lmcache.mooncake_preferred_segment"] = "legacy-decoder-host"
     adapter = _ascend_adapter_fake(_remote_store_requested=False)
     request = SimpleNamespace(
         request_configs=request_configs,
@@ -3355,22 +3273,23 @@ def test_remote_fill_disabled_preserves_legacy_group_selection() -> None:
     )
 
     assert (
-        request_configs["lmcache.mooncake_preferred_segment"]
-        == "legacy-decoder-host"
+        request_configs["lmcache.mooncake_preferred_segment"] == "legacy-decoder-host"
     )
-    assert _ascend_adapter_method("_direct_selected_groups")(
-        adapter,
-        request,
-        {0: ["latent"], 1: ["indexer"]},
-    ) == {}
+    assert (
+        _ascend_adapter_method("_direct_selected_groups")(
+            adapter,
+            request,
+            {0: ["latent"], 1: ["indexer"]},
+        )
+        == {}
+    )
 
 
 def test_remote_fill_disabled_stale_handoff_does_not_disable_live_source(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "lmcache_ascend.integration.vllm.vllm_v1_adapter."
-        "get_tensor_model_parallel_rank",
+        "lmcache.integration.vllm.vllm_v1_adapter.get_tensor_model_parallel_rank",
         lambda: 0,
     )
     calls = []
@@ -3428,9 +3347,7 @@ def test_remote_fill_disabled_stale_handoff_does_not_disable_live_source(
         "store",
     ]
     assert calls[-1][2]["final"] is True
-    assert request_configs["lmcache.mooncake_preferred_segment"] == (
-        "legacy-decoder"
-    )
+    assert request_configs["lmcache.mooncake_preferred_segment"] == ("legacy-decoder")
 
 
 def test_remote_fill_selects_both_authoritative_groups() -> None:
@@ -3463,9 +3380,7 @@ def test_remote_fill_submission_is_owned_by_finish_batch(
     engine = SimpleNamespace(
         discard_live_source_descriptor=lambda *_args: None,
         direct_prefill_store_enabled=lambda: True,
-        store_direct_prefill=lambda *args, **kwargs: calls.append(
-            (args, kwargs)
-        ),
+        store_direct_prefill=lambda *args, **kwargs: calls.append((args, kwargs)),
     )
     adapter = _ascend_adapter_fake(
         lmcache_engine=engine,
@@ -3527,7 +3442,7 @@ def test_remote_fill_rebuilds_probe_keys_for_full_prefix_hit() -> None:
         token_database=_TokenDatabase(),
         _remote_fill_direct_groups=lambda: (0, 1),
     )
-    plans = AscendLMCacheEngine._remote_fill_prefix_plans(
+    plans = LMCacheEngine._remote_fill_prefix_plans(
         engine,
         list(range(1024)),
         {"lmcache.remote_fill": {"transfer_id": "transfer"}},
@@ -3550,7 +3465,7 @@ def test_group0_remote_fill_rebuild_skips_group1_metadata() -> None:
         _remote_fill_direct_groups=lambda: (0,),
     )
 
-    plans = AscendLMCacheEngine._remote_fill_prefix_plans(
+    plans = LMCacheEngine._remote_fill_prefix_plans(
         engine,
         list(range(1024)),
         {"lmcache.remote_fill": {"transfer_id": "transfer"}},
@@ -3629,9 +3544,7 @@ class TestAdapterGroupSplit:
 
     def test_kvcaches_for_group(self):
         t0, i0 = object(), object()
-        fake = self._make_fake(
-            {"layer.0": t0, "indexer.0": i0}, dsa_two_groups=True
-        )
+        fake = self._make_fake({"layer.0": t0, "indexer.0": i0}, dsa_two_groups=True)
         _adapter_method("_refresh_kvcaches_list")(fake)
         assert _adapter_method("_kvcaches_for_group")(fake, 0) == [t0]
         assert _adapter_method("_kvcaches_for_group")(fake, 1) == [i0]
@@ -3640,9 +3553,7 @@ class TestAdapterGroupSplit:
 
     def test_without_dsa_two_groups_all_layers_are_latent(self):
         t0, i0 = object(), object()
-        fake = self._make_fake(
-            {"layer.0": t0, "indexer.0": i0}, dsa_two_groups=False
-        )
+        fake = self._make_fake({"layer.0": t0, "indexer.0": i0}, dsa_two_groups=False)
         _adapter_method("_refresh_kvcaches_list")(fake)
         # Without the flag, "indexer" layers are treated as latent.
         assert fake._latent_kvcaches == [t0, i0]
@@ -3694,17 +3605,13 @@ class TestAdapterIndexerSlotMapping:
 
     def test_falls_back_to_attn_slot_mapping(self):
         fake = self._make_fake()
-        attn = SimpleNamespace(
-            slot_mapping=torch.arange(10), indexer_slot_mapping=None
-        )
+        attn = SimpleNamespace(slot_mapping=torch.arange(10), indexer_slot_mapping=None)
         slot = _adapter_method("_indexer_retrieve_slot_mapping")(fake, attn, 5)
         assert slot.tolist() == list(range(5))
 
     def test_falls_back_to_indexer_slot_mapping_only(self):
         fake = self._make_fake()
-        attn = SimpleNamespace(
-            slot_mapping=None, indexer_slot_mapping=torch.arange(8)
-        )
+        attn = SimpleNamespace(slot_mapping=None, indexer_slot_mapping=torch.arange(8))
         slot = _adapter_method("_indexer_retrieve_slot_mapping")(fake, attn, 8)
         assert slot.tolist() == list(range(8))
 
@@ -3715,9 +3622,7 @@ class TestAdapterIndexerSlotMapping:
 
     def test_rejects_mapping_when_count_exceeds_length(self):
         fake = self._make_fake()
-        attn = SimpleNamespace(
-            slot_mapping=torch.arange(4), indexer_slot_mapping=None
-        )
+        attn = SimpleNamespace(slot_mapping=torch.arange(4), indexer_slot_mapping=None)
         slot = _adapter_method("_indexer_retrieve_slot_mapping")(fake, attn, 10)
         assert slot is None
 
@@ -3766,9 +3671,7 @@ class TestStorerDualPop:
             LMCacheConnectorMetadata,
         )
 
-        meta = LMCacheConnectorMetadata(
-            requests=[SimpleNamespace(req_id="r1")]
-        )
+        meta = LMCacheConnectorMetadata(requests=[SimpleNamespace(req_id="r1")])
         gen0 = self._make_storer_gen()
         gen1 = self._make_storer_gen()
         storers = {("r1", 0): gen0, ("r1", 1): gen1}
@@ -3785,9 +3688,7 @@ class TestStorerDualPop:
             LMCacheConnectorMetadata,
         )
 
-        meta = LMCacheConnectorMetadata(
-            requests=[SimpleNamespace(req_id="r2")]
-        )
+        meta = LMCacheConnectorMetadata(requests=[SimpleNamespace(req_id="r2")])
         gen0 = self._make_storer_gen()
         storers = {("r2", 0): gen0}  # indexer storer never created
 
@@ -3834,8 +3735,8 @@ class TestAscendDecodeWindowWaitForSaveCompletion:
             _should_defer_latent_save_under_tp=lambda: False,
             _finalize_layerwise_storer=lambda storer: (True, None),
             _consume_completed_layerwise_store=(
-                lambda req, kv_group, completed, result: (
-                    completed_groups.append(kv_group)
+                lambda req, kv_group, completed, result: completed_groups.append(
+                    kv_group
                 )
             ),
             _mark_decode_window_save_completed=lambda req: None,
@@ -3869,12 +3770,11 @@ class TestAscendDecodeWindowWaitForSaveCompletion:
         fake = self._make_fake(request, {}, [])
         events = []
         fake._finished_req_ids_waiting_for_save = {"r-window"}
-        fake.lmcache_engine.wait_for_pending_sync_stores.side_effect = (
-            lambda: events.append(("barrier", fake._wait_for_save_done))
+        fake.lmcache_engine.wait_for_pending_sync_stores.side_effect = lambda: (
+            events.append(("barrier", fake._wait_for_save_done))
         )
         fake._finalize_worker_requests_after_store = lambda _req_ids: (
-            events.append(("finalize", fake._wait_for_save_done))
-            or set()
+            events.append(("finalize", fake._wait_for_save_done)) or set()
         )
 
         _ascend_adapter_method("wait_for_save")(fake)
@@ -3886,8 +3786,8 @@ class TestAscendDecodeWindowWaitForSaveCompletion:
         fake = self._make_fake(request, {}, [])
         fake._finished_req_ids_waiting_for_save = {"r-window"}
         fake._finalize_worker_requests_after_store = MagicMock(return_value=set())
-        fake.lmcache_engine.wait_for_pending_sync_stores.side_effect = (
-            TimeoutError("store barrier timed out")
+        fake.lmcache_engine.wait_for_pending_sync_stores.side_effect = TimeoutError(
+            "store barrier timed out"
         )
 
         with pytest.raises(TimeoutError, match="store barrier timed out"):
@@ -3956,11 +3856,13 @@ class TestRetrieverPairAdvancement:
         next(indexer_gen)
 
         meta = LMCacheConnectorMetadata(
-            requests=[SimpleNamespace(
-                req_id="r1",
-                load_spec=SimpleNamespace(can_load=True),
-                is_sparse_decode=False,
-            )]
+            requests=[
+                SimpleNamespace(
+                    req_id="r1",
+                    load_spec=SimpleNamespace(can_load=True),
+                    is_sparse_decode=False,
+                )
+            ]
         )
         fake = self._bind_wait_protocol(
             SimpleNamespace(
@@ -3991,11 +3893,13 @@ class TestRetrieverPairAdvancement:
         next(primary_gen)  # prime
 
         meta = LMCacheConnectorMetadata(
-            requests=[SimpleNamespace(
-                req_id="r1",
-                load_spec=SimpleNamespace(can_load=True),
-                is_sparse_decode=True,
-            )]
+            requests=[
+                SimpleNamespace(
+                    req_id="r1",
+                    load_spec=SimpleNamespace(can_load=True),
+                    is_sparse_decode=True,
+                )
+            ]
         )
         fake = self._bind_wait_protocol(
             SimpleNamespace(
@@ -4024,8 +3928,30 @@ class TestRetrieverPairAdvancement:
             LMCacheConnectorMetadata,
         )
 
-        producer_layers = (0, 1, 2, 6, 10, 14, 18, 22, 26, 30, 34, 38,
-                           42, 46, 50, 54, 58, 62, 66, 70, 74, 78)
+        producer_layers = (
+            0,
+            1,
+            2,
+            6,
+            10,
+            14,
+            18,
+            22,
+            26,
+            30,
+            34,
+            38,
+            42,
+            46,
+            50,
+            54,
+            58,
+            62,
+            66,
+            70,
+            74,
+            78,
+        )
         latent_sends = []
         indexer_sends = []
 
@@ -4084,9 +4010,7 @@ class TestRetrieverPairAdvancement:
             if layer_id in producer_layers:
                 _adapter_method("wait_for_layer_load")(
                     fake,
-                    layer_name=(
-                        f"model.layers.{layer_id}.self_attn.indexer.k_cache"
-                    ),
+                    layer_name=(f"model.layers.{layer_id}.self_attn.indexer.k_cache"),
                 )
             _adapter_method("wait_for_layer_load")(
                 fake,
@@ -4100,6 +4024,7 @@ class TestRetrieverPairAdvancement:
 # ---------------------------------------------------------------------------
 # Integration: mimic vLLM worker call sequence against the adapter
 # ---------------------------------------------------------------------------
+
 
 def _bind_real(fake, *names):
     """Bind real LMCacheConnectorV1Impl methods onto a fake instance."""
@@ -4117,6 +4042,7 @@ def _bind_real(fake, *names):
 
 def _long_generator(value=None, n=32):
     """A generator that yields n times (mimics store_layer/retrieve_layer)."""
+
     def _gen():
         for _ in range(n):
             yield value
@@ -4132,30 +4058,36 @@ class _RecordingEngine:
         self.retrieve_calls: list[dict] = []
 
     def store_layer(self, *args, **kwargs):
-        self.store_calls.append({
-            "kvcaches": kwargs.get("kvcaches"),
-            "kv_group": kwargs.get("kv_group", 0),
-            "req_id": kwargs.get("req_id"),
-        })
+        self.store_calls.append(
+            {
+                "kvcaches": kwargs.get("kvcaches"),
+                "kv_group": kwargs.get("kv_group", 0),
+                "req_id": kwargs.get("req_id"),
+            }
+        )
         return _long_generator()
 
     def retrieve_layer(self, *args, **kwargs):
-        self.retrieve_calls.append({
-            "kvcaches": kwargs.get("kvcaches"),
-            "kv_group": kwargs.get("kv_group"),
-            "slot_mapping": kwargs.get("slot_mapping"),
-            "kind": "layer",
-        })
+        self.retrieve_calls.append(
+            {
+                "kvcaches": kwargs.get("kvcaches"),
+                "kv_group": kwargs.get("kv_group"),
+                "slot_mapping": kwargs.get("slot_mapping"),
+                "kind": "layer",
+            }
+        )
         # Retrieve generators yield a ret_mask per layer; return a truthy mask.
         return _long_generator(value=torch.ones(1, dtype=torch.bool))
 
     def retrieve_layer_head_token_wise(self, *args, **kwargs):
-        self.retrieve_calls.append({
-            "kvcaches": kwargs.get("kvcaches"),
-            "kv_group": kwargs.get("kv_group"),
-            "slot_mapping": kwargs.get("slot_mapping"),
-            "kind": "sparse_head_token_wise",
-        })
+        self.retrieve_calls.append(
+            {
+                "kvcaches": kwargs.get("kvcaches"),
+                "kv_group": kwargs.get("kv_group"),
+                "slot_mapping": kwargs.get("slot_mapping"),
+                "kind": "sparse_head_token_wise",
+            }
+        )
         return _long_generator(value=torch.ones(1, dtype=torch.bool))
 
 
@@ -4293,8 +4225,8 @@ def _make_fake_adapter(num_layers=2, dsa_two_groups=True):
             tokens if is_sparse_decode else list(tokens)[:cached]
         ),
         _full_hit_recalc_last_token=lambda *a, **k: False,
-        _load_token_mask_for_retrieve=lambda req, token_count, chunk_size: (
-            torch.ones(token_count, dtype=torch.bool)
+        _load_token_mask_for_retrieve=lambda req, token_count, chunk_size: torch.ones(
+            token_count, dtype=torch.bool
         ),
         _finalize_worker_retrieve_state_from_metadata=lambda m: None,
         _sparse_decode_retrieve_warm_kwargs=lambda *a, **k: {},
@@ -4317,15 +4249,14 @@ class TestVLLMCallSequence:
         fake = _make_fake_adapter(num_layers=2, dsa_two_groups=True)
         engine: _RecordingEngine = fake.lmcache_engine
 
-        meta = LMCacheConnectorMetadata(
-            requests=[_make_save_req("r1", 64)]
-        )
+        meta = LMCacheConnectorMetadata(requests=[_make_save_req("r1", 64)])
         fake._parent = SimpleNamespace(
             _connector_metadata=meta,
             _get_connector_metadata=lambda: meta,
         )
-        attn = SimpleNamespace(slot_mapping=torch.arange(64, dtype=torch.long),
-                               indexer_slot_mapping=None)
+        attn = SimpleNamespace(
+            slot_mapping=torch.arange(64, dtype=torch.long), indexer_slot_mapping=None
+        )
 
         # vLLM calls save_kv_layer once per layer, alternating groups.
         # Latent layers:
@@ -4470,12 +4401,12 @@ class TestVLLMCallSequence:
             tensors=[[torch.zeros(1)], [torch.zeros(1)]],
         )
 
-        fake._layerwise_save_storers[
-            ("r1", "normal_save", 0, 0, 128)
-        ] = _long_generator(value=latent_result, n=1)
-        fake._layerwise_save_storers[
-            ("r1", "normal_save", 1, 0, 128)
-        ] = _long_generator(value=index_result, n=1)
+        fake._layerwise_save_storers[("r1", "normal_save", 0, 0, 128)] = (
+            _long_generator(value=latent_result, n=1)
+        )
+        fake._layerwise_save_storers[("r1", "normal_save", 1, 0, 128)] = (
+            _long_generator(value=index_result, n=1)
+        )
         meta = LMCacheConnectorMetadata(requests=[req])
         fake._parent = SimpleNamespace(
             _connector_metadata=meta,
@@ -4500,15 +4431,14 @@ class TestVLLMCallSequence:
         fake = _make_fake_adapter(num_layers=2, dsa_two_groups=False)
         engine: _RecordingEngine = fake.lmcache_engine
 
-        meta = LMCacheConnectorMetadata(
-            requests=[_make_save_req("r1", 64)]
-        )
+        meta = LMCacheConnectorMetadata(requests=[_make_save_req("r1", 64)])
         fake._parent = SimpleNamespace(
             _connector_metadata=meta,
             _get_connector_metadata=lambda: meta,
         )
-        attn = SimpleNamespace(slot_mapping=torch.arange(64, dtype=torch.long),
-                               indexer_slot_mapping=None)
+        attn = SimpleNamespace(
+            slot_mapping=torch.arange(64, dtype=torch.long), indexer_slot_mapping=None
+        )
 
         fake.save_kv_layer("layer.0", kv_layer=None, attn_metadata=attn)
         fake.save_kv_layer("layer.1", kv_layer=None, attn_metadata=attn)
@@ -4524,9 +4454,8 @@ class TestVLLMCallSequence:
 
 
 class TestPermuteKvCachesToContiguous:
-
     def test_dsa_index_one_tuple(self) -> None:
-        from lmcache_ascend.v1.npu_connector.utils import (
+        from lmcache.v1.npu_connector.utils import (
             permute_kv_caches_to_contiguous,
         )
 
@@ -4539,7 +4468,7 @@ class TestPermuteKvCachesToContiguous:
         assert result[0][0].shape == indexer.shape
 
     def test_mla_latent_two_tuple(self) -> None:
-        from lmcache_ascend.v1.npu_connector.utils import (
+        from lmcache.v1.npu_connector.utils import (
             permute_kv_caches_to_contiguous,
         )
 

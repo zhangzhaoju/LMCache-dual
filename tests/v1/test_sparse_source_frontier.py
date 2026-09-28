@@ -10,7 +10,7 @@ import pytest
 import torch
 
 # First Party
-from lmcache.v1.gpu_connector.sparse import build_prepared_sparse_source
+from lmcache.v1.device_connector.sparse import build_prepared_sparse_source
 
 
 def load_prepare_method(name: str) -> Any:

@@ -18,8 +18,8 @@ prepare_environment()
 
 # Third Party
 # NOTE (gingfung): at this point,
-# the CudaIPCWrapper should be patched already.
-from lmcache.v1.multiprocess.custom_types import CudaIPCWrapper  # noqa: E402
+# the NPUIPCWrapper should be patched already.
+from lmcache.v1.multiprocess.custom_types import NPUIPCWrapper  # noqa: E402
 from lmcache_tests.v1.multiprocess.test_custom_types import (  # noqa: F401, E402
     get_customized_decoder,
     get_customized_encoder,
@@ -34,12 +34,12 @@ def _worker_process_deserialize_and_reconstruct(
 ):
     """
     Worker function that runs in a separate process.
-    Deserializes CudaIPCWrapper list and reconstructs tensors.
+    Deserializes NPUIPCWrapper list and reconstructs tensors.
     """
     try:
         # Decode the list of wrappers
         torch.npu.init()
-        decoder = get_customized_decoder(type=list[CudaIPCWrapper])
+        decoder = get_customized_decoder(type=list[NPUIPCWrapper])
         decoded_wrappers = decoder.decode(encoded_data)
 
         # Convert each wrapper back to tensor and compute checksum
@@ -66,7 +66,7 @@ def _worker_process_deserialize_and_reconstruct(
 )
 def test_cudaipc_wrapper_multiprocess_serialization():
     """
-    Test CudaIPCWrapper serialization across processes using spawn method.
+    Test NPUIPCWrapper serialization across processes using spawn method.
     This verifies that CUDA IPC handles can be properly shared between processes.
     """
     # Set multiprocessing start method to spawn
@@ -84,7 +84,7 @@ def test_cudaipc_wrapper_multiprocess_serialization():
             (2, 3), fill_value=float(i + 1), dtype=torch.float32, device="cuda"
         )
         tensors.append(tensor)
-        wrapper = CudaIPCWrapper(tensor)
+        wrapper = NPUIPCWrapper(tensor)
         wrappers.append(wrapper)
 
         # Store expected checksum and shape
@@ -93,7 +93,7 @@ def test_cudaipc_wrapper_multiprocess_serialization():
         test_data.append((expected_checksum, expected_shape))
 
     # Serialize the wrappers
-    encoder = get_customized_encoder(type=list[CudaIPCWrapper])
+    encoder = get_customized_encoder(type=list[NPUIPCWrapper])
     encoded_data = encoder.encode(wrappers)
 
     # Create a queue for results

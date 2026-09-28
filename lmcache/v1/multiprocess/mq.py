@@ -17,7 +17,7 @@ import zmq
 from lmcache.logging import init_logger
 from lmcache.v1.multiprocess.affinity_pool import AffinityThreadPool
 from lmcache.v1.multiprocess.custom_types import (
-    CudaIPCWrapper,
+    NPUIPCWrapper,
     get_customized_decoder,
     get_customized_encoder,
 )
@@ -79,13 +79,13 @@ def prepare_internal_push_pull_sockets(
 
 
 _SPECIAL_ENCODER_DECODERS = {
-    CudaIPCWrapper: (
-        get_customized_encoder(CudaIPCWrapper),
-        get_customized_decoder(CudaIPCWrapper),
+    NPUIPCWrapper: (
+        get_customized_encoder(NPUIPCWrapper),
+        get_customized_decoder(NPUIPCWrapper),
     ),
-    list[CudaIPCWrapper]: (
-        get_customized_encoder(list[CudaIPCWrapper]),
-        get_customized_decoder(list[CudaIPCWrapper]),
+    list[NPUIPCWrapper]: (
+        get_customized_encoder(list[NPUIPCWrapper]),
+        get_customized_decoder(list[NPUIPCWrapper]),
     ),
 }
 

@@ -44,7 +44,7 @@ from lmcache.v1.mp_observability.config import DEFAULT_OBSERVABILITY_CONFIG
 from lmcache.v1.multiprocess.blend_server_v2 import BlendTokenRangeMatcher
 from lmcache.v1.multiprocess.custom_types import (
     CBMatchResult,
-    CudaIPCWrapper,
+    NPUIPCWrapper,
     IPCCacheEngineKey,
     KVCache,
 )
@@ -385,7 +385,7 @@ class CBClientContext:
         )
 
     def get_kv_cache(self) -> KVCache:
-        return [CudaIPCWrapper(self.gpu_kv_cache)]
+        return [NPUIPCWrapper(self.gpu_kv_cache)]
 
     def get_tensor_slice(self, start_token: int, num_tokens: int) -> torch.Tensor:
         return self.gpu_kv_cache[:, :, start_token : start_token + num_tokens, :]
@@ -419,7 +419,7 @@ class ClientContext:
         )
 
     def get_kv_cache(self) -> KVCache:
-        return [CudaIPCWrapper(tensor) for tensor in self.gpu_kv_caches]
+        return [NPUIPCWrapper(tensor) for tensor in self.gpu_kv_caches]
 
     def get_tensor_slice(
         self, layer: int, start_page: int, num_pages: int

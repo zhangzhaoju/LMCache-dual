@@ -86,7 +86,7 @@ def fixture():
     declarations(
         ROOT / "lmcache_ascend/integration/vllm/vllm_v1_adapter.py",
         {
-            "LMCacheAscendConnectorV1Impl": {
+            "LMCacheConnectorV1Impl": {
                 "handle_preemptions",
                 "_activate_checkpoint_io",
                 "_checkpoint_start_load",
@@ -113,7 +113,7 @@ def fixture():
     # Use the deployed subclass declaration, preserving its real base class.
     declarations(
         ROOT / "lmcache_ascend/integration/vllm/lmcache_ascend_connector_v1.py",
-        {"LMCacheAscendConnectorV1Dynamic": {"supports_dsa_compact_load"}},
+        {"LMCacheConnectorV1Dynamic": {"supports_dsa_compact_load"}},
         ns,
     )
     declarations(
@@ -148,7 +148,7 @@ def fixture():
     engine.wait_for_pending_stores = lambda ids: calls.append("drain")
     engine.wait_for_direct_stores = lambda ids: calls.append("direct-drain")
     engine.drop_direct_store_states = lambda ids: calls.append("drop-store")
-    impl = ns["LMCacheAscendConnectorV1Impl"]()
+    impl = ns["LMCacheConnectorV1Impl"]()
     impl.lmcache_engine = engine
     impl.config = NS(decode_preemption_checkpoint=True)
     impl.store_async, impl.kv_role = True, "kv_both"
@@ -157,7 +157,7 @@ def fixture():
     impl._worker_retrieve_state = {}
     impl._direct_group_caches = lambda: {0: [object()], 1: [object()]}
     impl._drop_worker_retrieve_state = lambda req: calls.append("drop-state")
-    dynamic = ns["LMCacheAscendConnectorV1Dynamic"]()
+    dynamic = ns["LMCacheConnectorV1Dynamic"]()
     dynamic._lmcache_engine, dynamic.metadata = impl, None
     impl._parent = dynamic
     multi = ns["AscendMultiConnector"]()

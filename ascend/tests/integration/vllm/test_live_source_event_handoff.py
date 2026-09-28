@@ -10,11 +10,11 @@ import pytest
 
 pytest.importorskip("lmcache")
 pytest.importorskip("vllm")
-pytest.importorskip("vllm_ascend")
+pytest.importorskip("vllm")
 
-adapter_mod = pytest.importorskip("lmcache_ascend.integration.vllm.vllm_v1_adapter")
+adapter_mod = pytest.importorskip("lmcache.integration.vllm.vllm_v1_adapter")
 base_adapter_mod = pytest.importorskip("lmcache.integration.vllm.vllm_v1_adapter")
-handoff_mod = pytest.importorskip("vllm_ascend.live_source_handoff")
+handoff_mod = pytest.importorskip("vllm.distributed.kv_transfer.live_source_handoff")
 
 
 @pytest.mark.parametrize(
@@ -47,7 +47,7 @@ def test_fence_preserves_readiness_with_independent_diagnostic_modes(
         lmcache_engine=SimpleNamespace(finalize_live_source_readiness=finalize),
         _query_source_ready_event=MagicMock(return_value=True),
     )
-    adapter_mod.LMCacheAscendConnectorV1Impl._fence_live_source_descriptors(adapter)
+    adapter_mod.LMCacheConnectorV1Impl._fence_live_source_descriptors(adapter)
     event.synchronize.assert_called_once_with()
     finalize.assert_called_once_with(["r"])
     assert adapter._live_source_ready_fences == {}
@@ -80,7 +80,7 @@ def _request(
 
 
 def test_final_deferred_targets_include_only_final_requests() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     adapter.config = SimpleNamespace(remote_fill_submission_mode="final_deferred")
     adapter._remote_store_requested = True
     requests = [
@@ -107,7 +107,7 @@ def test_final_deferred_targets_include_only_final_requests() -> None:
 
 
 def test_per_chunk_targets_include_qualified_nonfinal_frontier() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     adapter.config = SimpleNamespace(remote_fill_submission_mode="per_chunk")
     adapter._remote_store_requested = True
     request = _request(
@@ -124,7 +124,7 @@ def test_per_chunk_targets_include_qualified_nonfinal_frontier() -> None:
 
 
 def test_start_load_arms_handoff_after_base_load_setup() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     adapter.config = SimpleNamespace(dsa_two_groups=True)
     adapter._latent_layer_names = ["layer-0", "layer-78"]
     adapter._direct_prefill_requests = MagicMock(return_value=[_request("req-1")])
@@ -145,16 +145,14 @@ def test_start_load_arms_handoff_after_base_load_setup() -> None:
 
 
 def test_capture_retains_exact_event_for_deferred_mtp_finalization() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     metadata = SimpleNamespace()
     adapter._parent = SimpleNamespace(_get_connector_metadata=lambda: metadata)
     adapter._latent_layer_names = ["layer-0", "layer-78"]
     adapter._direct_prefill_requests = MagicMock(return_value=[_request("req-1")])
     event = object()
     context = SimpleNamespace(
-        additional_kwargs={
-            handoff_mod.LIVE_SOURCE_EVENT_HANDOFF_KEY: (("req-1", 1),)
-        },
+        additional_kwargs={handoff_mod.LIVE_SOURCE_EVENT_HANDOFF_KEY: (("req-1", 1),)},
         attn_metadata={
             "layer-0": SimpleNamespace(reshape_cache_event=event),
             "layer-78": SimpleNamespace(),
@@ -169,15 +167,13 @@ def test_capture_retains_exact_event_for_deferred_mtp_finalization() -> None:
 
 
 def test_dbo_capture_fails_closed() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     metadata = SimpleNamespace()
     adapter._parent = SimpleNamespace(_get_connector_metadata=lambda: metadata)
     adapter._latent_layer_names = ["layer-0"]
     adapter._direct_prefill_requests = MagicMock(return_value=[_request("req-1")])
     context = SimpleNamespace(
-        additional_kwargs={
-            handoff_mod.LIVE_SOURCE_EVENT_HANDOFF_KEY: (("req-1", 1),)
-        },
+        additional_kwargs={handoff_mod.LIVE_SOURCE_EVENT_HANDOFF_KEY: (("req-1", 1),)},
         attn_metadata=[{"layer-0": SimpleNamespace(reshape_cache_event=object())}],
     )
 
@@ -186,17 +182,13 @@ def test_dbo_capture_fails_closed() -> None:
 
 
 def test_duplicate_capture_discards_retained_event() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
-    metadata = SimpleNamespace(
-        _live_source_event_handoff=((("req-1", 1),), object())
-    )
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
+    metadata = SimpleNamespace(_live_source_event_handoff=((("req-1", 1),), object()))
     adapter._parent = SimpleNamespace(_get_connector_metadata=lambda: metadata)
     adapter._latent_layer_names = ["layer-0"]
     adapter._direct_prefill_requests = MagicMock(return_value=[_request("req-1")])
     context = SimpleNamespace(
-        additional_kwargs={
-            handoff_mod.LIVE_SOURCE_EVENT_HANDOFF_KEY: (("req-1", 1),)
-        },
+        additional_kwargs={handoff_mod.LIVE_SOURCE_EVENT_HANDOFF_KEY: (("req-1", 1),)},
         attn_metadata={"layer-0": SimpleNamespace(reshape_cache_event=object())},
     )
 
@@ -205,7 +197,7 @@ def test_duplicate_capture_discards_retained_event() -> None:
 
 
 def test_finish_save_batch_passes_handoff_event_to_live_descriptor() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     event = object()
     request = _request("req-1")
     handoff = ((("req-1", 1),), event)
@@ -260,16 +252,14 @@ def test_finish_save_batch_passes_handoff_event_to_live_descriptor() -> None:
 
 
 def test_finish_save_batch_handoff_supersedes_partial_callback_fence() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     callback_event = object()
     handoff_event = object()
     request = _request("req-1")
     adapter.kv_role = "kv_producer"
     adapter.lmcache_engine = MagicMock()
     adapter._latest_live_source_ready_event = callback_event
-    adapter._latest_live_source_ready_event_source = (
-        "attn_metadata.reshape_cache_event"
-    )
+    adapter._latest_live_source_ready_event_source = "attn_metadata.reshape_cache_event"
     adapter._latest_direct_source_ready_events = {"layer-0": callback_event}
     adapter._latent_layer_names = ["layer-0", "layer-78"]
     adapter._indexer_layer_names = ["index-0", "index-78"]
@@ -318,20 +308,16 @@ def test_finish_save_batch_handoff_supersedes_partial_callback_fence() -> None:
     )
 
 
-def test_finish_save_batch_mismatched_handoff_does_not_authorize_remote_fill(
-) -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+def test_finish_save_batch_mismatched_handoff_does_not_authorize_remote_fill() -> None:
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     callback_event = object()
     request = _request("req-1")
     adapter.kv_role = "kv_producer"
     adapter.lmcache_engine = MagicMock()
     adapter._latest_live_source_ready_event = callback_event
-    adapter._latest_live_source_ready_event_source = (
-        "attn_metadata.reshape_cache_event"
-    )
+    adapter._latest_live_source_ready_event_source = "attn_metadata.reshape_cache_event"
     adapter._latest_direct_source_ready_events = {
-        name: callback_event
-        for name in ("layer-0", "layer-78", "index-0", "index-78")
+        name: callback_event for name in ("layer-0", "layer-78", "index-0", "index-78")
     }
     adapter._latent_layer_names = ["layer-0", "layer-78"]
     adapter._indexer_layer_names = ["index-0", "index-78"]
@@ -386,7 +372,7 @@ def test_finish_save_batch_mismatched_handoff_does_not_authorize_remote_fill(
 
 
 def test_finish_save_batch_logs_absent_handoff_without_completing_fence() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     request = _request("req-1")
     adapter.kv_role = "kv_producer"
     adapter.lmcache_engine = MagicMock()
@@ -472,13 +458,13 @@ def test_pending_sync_timing_is_gated_and_preserves_the_wait(
         wait.side_effect = RuntimeError("original wait failure")
         adapter._completed_layerwise_stores = {("r", 0): object()}
         with pytest.raises(RuntimeError, match="original wait failure"):
-            adapter_mod.LMCacheAscendConnectorV1Impl._finish_save_batch(adapter, {})
+            adapter_mod.LMCacheConnectorV1Impl._finish_save_batch(adapter, {})
         assert adapter._completed_layerwise_stores == {}
         assert clock.call_count == int(enabled)
         log.assert_not_called()
         adapter._submit_direct_prefill_requests.assert_not_called()
         return
-    adapter_mod.LMCacheAscendConnectorV1Impl._finish_save_batch(adapter, {})
+    adapter_mod.LMCacheConnectorV1Impl._finish_save_batch(adapter, {})
     wait.assert_called_once_with()
     assert clock.call_count == (2 if enabled else 0)
     assert log.call_count == int(enabled)
@@ -488,16 +474,14 @@ def test_pending_sync_timing_is_gated_and_preserves_the_wait(
 
 
 def test_frontier_change_between_arm_and_capture_fails_closed() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     metadata = SimpleNamespace()
     adapter._parent = SimpleNamespace(_get_connector_metadata=lambda: metadata)
     adapter._latent_layer_names = ["layer-78"]
     adapter._direct_prefill_requests = MagicMock(return_value=[_request("req-1")])
     event = object()
     context = SimpleNamespace(
-        additional_kwargs={
-            handoff_mod.LIVE_SOURCE_EVENT_HANDOFF_KEY: (("req-1", 2),)
-        },
+        additional_kwargs={handoff_mod.LIVE_SOURCE_EVENT_HANDOFF_KEY: (("req-1", 2),)},
         attn_metadata={"layer-78": SimpleNamespace(reshape_cache_event=event)},
     )
 

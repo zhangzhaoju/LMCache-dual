@@ -11,16 +11,14 @@ import pytest
 pytest.importorskip("lmcache")
 pytest.importorskip("vllm")
 
-adapter_mod = pytest.importorskip("lmcache_ascend.integration.vllm.vllm_v1_adapter")
-base_adapter_mod = pytest.importorskip(
-    "lmcache.integration.vllm.vllm_v1_adapter"
-)
+adapter_mod = pytest.importorskip("lmcache.integration.vllm.vllm_v1_adapter")
+base_adapter_mod = pytest.importorskip("lmcache.integration.vllm.vllm_v1_adapter")
 
 
 def _make_adapter(*, store_async: bool, requests=None, kv_role="kv_both"):
     engine = MagicMock()
     metadata = base_adapter_mod.LMCacheConnectorMetadata(requests=requests or [])
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     adapter.store_async = store_async
     adapter.kv_role = kv_role
     adapter._manager = SimpleNamespace(lmcache_engine=engine)
