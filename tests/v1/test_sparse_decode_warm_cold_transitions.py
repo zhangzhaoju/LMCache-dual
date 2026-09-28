@@ -18,8 +18,8 @@ from lmcache.integration.vllm.vllm_v1_adapter import (
 )
 from tests.v1.connector_test_utils import make_worker_impl
 
-pytest.importorskip("lmcache_ascend", reason="Ascend package required for engine tests")
-from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine
+pytest.importorskip("lmcache", reason="Ascend package required for engine tests")
+from lmcache.v1.cache_engine import LMCacheEngine
 
 
 def _make_sparse_request(*, resumed: bool = False) -> ReqMeta:
@@ -46,9 +46,7 @@ def _publish_sparse_state(
     )
     if with_data:
         state.cached_tensors = [[torch.zeros(256)]]
-        state.cached_chunk_ptrs_npu = [
-            torch.tensor([123], dtype=torch.int64)
-        ]
+        state.cached_chunk_ptrs_npu = [torch.tensor([123], dtype=torch.int64)]
     impl._publish_worker_retrieve_state(
         state,
         request,
@@ -198,41 +196,35 @@ class TestConnectorWarmColdInvalidate:
             location="LocalCPUBackend",
             token_count=256,
         )
-        warm = impl._sparse_decode_bootstrap_reuse_kwargs(
-            512, state
-        )
+        warm = impl._sparse_decode_bootstrap_reuse_kwargs(512, state)
         assert "_retrieve_metadata_warm" not in warm
         assert warm["cached_retrieve_location"] == "LocalCPUBackend"
 
 
 class TestAscendEngineWarmColdMetadata:
     def test_has_retrieve_data_cache_cold_vs_warm(self) -> None:
-        assert not AscendLMCacheEngine._has_retrieve_data_cache(None, None, 2)
+        assert not LMCacheEngine._has_retrieve_data_cache(None, None, 2)
         # Empty per-layer lists describe shape only; they do not prove data is
         # ready for warm reuse.
-        assert not AscendLMCacheEngine._has_retrieve_data_cache([[], []], None, 2)
+        assert not LMCacheEngine._has_retrieve_data_cache([[], []], None, 2)
 
         cached_tensors = [torch.zeros(1), torch.zeros(1)]
-        assert AscendLMCacheEngine._has_retrieve_data_cache(cached_tensors, None, 2)
+        assert LMCacheEngine._has_retrieve_data_cache(cached_tensors, None, 2)
 
         cached_memory_objs = [[MagicMock()], [MagicMock()]]
-        assert AscendLMCacheEngine._has_retrieve_data_cache(
-            None, cached_memory_objs, 2
-        )
-        assert AscendLMCacheEngine._has_retrieve_data_cache(
-            [[], []], cached_memory_objs, 2
-        )
+        assert LMCacheEngine._has_retrieve_data_cache(None, cached_memory_objs, 2)
+        assert LMCacheEngine._has_retrieve_data_cache([[], []], cached_memory_objs, 2)
 
     def test_metadata_refresh_when_prefix_grows(self) -> None:
-        assert AscendLMCacheEngine._needs_retrieve_metadata_refresh(
+        assert LMCacheEngine._needs_retrieve_metadata_refresh(
             [["k"]], [0], [256], [0] * 512
         )
-        assert not AscendLMCacheEngine._needs_retrieve_metadata_refresh(
+        assert not LMCacheEngine._needs_retrieve_metadata_refresh(
             [["k"]], [0], [256], [0] * 256
         )
 
     def test_warm_metadata_skips_contains_when_tensor_cache_ready(self) -> None:
-        engine = AscendLMCacheEngine.__new__(AscendLMCacheEngine)
+        engine = LMCacheEngine.__new__(LMCacheEngine)
         engine.storage_manager = MagicMock()
         engine.storage_manager.storage_backends = {"LocalCPUBackend": MagicMock()}
         engine.retrieve_locations = None
@@ -264,7 +256,7 @@ class TestAscendEngineWarmColdMetadata:
         assert keys == cached_keys
 
     def test_stale_location_rechecked_when_not_using_tensor_cache(self) -> None:
-        engine = AscendLMCacheEngine.__new__(AscendLMCacheEngine)
+        engine = LMCacheEngine.__new__(LMCacheEngine)
         engine.storage_manager = MagicMock()
         engine.retrieve_locations = ["LocalCPUBackend", "RemoteBackend"]
         engine.num_layers = 2
@@ -301,7 +293,7 @@ class TestAscendEngineWarmColdMetadata:
     def test_metadata_refresh_requires_all_layer_keys(self) -> None:
         from lmcache.utils import CacheEngineKey
 
-        engine = AscendLMCacheEngine.__new__(AscendLMCacheEngine)
+        engine = LMCacheEngine.__new__(LMCacheEngine)
         engine.storage_manager = MagicMock()
         engine.retrieve_locations = ["LocalCPUBackend"]
         engine.num_layers = 2
@@ -353,9 +345,7 @@ class TestSparseDecodeTokenMask:
             decode_token_mask=torch.ones(512, dtype=torch.bool),
         )
 
-        token_mask = make_worker_impl()._load_token_mask_for_retrieve(
-            request, 512, 256
-        )
+        token_mask = make_worker_impl()._load_token_mask_for_retrieve(request, 512, 256)
 
         assert token_mask[:256].eq(False).all()
         assert token_mask[256:].eq(True).all()

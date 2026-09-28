@@ -7,7 +7,7 @@ and passed between processes during multiprocessing tests.
 """
 
 # First Party
-from lmcache.v1.gpu_connector.utils import LayoutHints
+from lmcache.v1.device_connector.utils import LayoutHints
 from lmcache.v1.multiprocess.custom_types import BlockAllocationRecord, KVCache
 from lmcache.v1.multiprocess.protocol import KeyType
 
@@ -41,7 +41,7 @@ def register_kv_cache_handler(
 
     Args:
         gpu_id: GPU device ID
-        kv_cache: List of CudaIPCWrapper objects representing KV cache
+        kv_cache: List of NPUIPCWrapper objects representing KV cache
         model_name: Name of the model associated with this KV cache
         world_size: World size associated with this KV cache
         layout_hints: Engine-provided hints dict

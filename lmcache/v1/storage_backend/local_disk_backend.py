@@ -9,6 +9,7 @@ import time
 
 # Third Party
 import torch
+import torch_npu  # noqa: F401
 
 # First Party
 from lmcache.logging import init_logger
@@ -100,11 +101,11 @@ class LocalDiskBackend(StorageBackendInterface):
         config: LMCacheEngineConfig,
         loop: asyncio.AbstractEventLoop,
         local_cpu_backend: LocalCPUBackend,
-        dst_device: str = "cuda",
+        dst_device: str = "npu",
         lmcache_worker: Optional["LMCacheWorker"] = None,
         metadata: Optional[LMCacheMetadata] = None,
     ):
-        if torch.cuda.is_available():
+        if torch.npu.is_available():
             super().__init__(dst_device)
         else:
             super().__init__("cpu")

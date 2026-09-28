@@ -50,15 +50,18 @@ from lmcache.v1.remote_fill.native import (
 )
 
 # First Party
-import lmcache_ascend.v1.remote_fill_coordinator as coordinator_module
-from lmcache_ascend.v1.remote_fill_coordinator import ProducerRequestState, RemoteFillCoordinator
-import lmcache_ascend.v1.remote_fill_producer as producer_module
-from lmcache_ascend.v1.cache_engine import (
-    AscendLMCacheEngine,
+import lmcache.v1.remote_fill_coordinator as coordinator_module
+from lmcache.v1.remote_fill_coordinator import (
+    ProducerRequestState,
+    RemoteFillCoordinator,
+)
+import lmcache.v1.remote_fill_producer as producer_module
+from lmcache.v1.cache_engine import (
+    LMCacheEngine,
     _DirectPageBatch,
     _DirectStoreRequestState,
 )
-from lmcache_ascend.v1.remote_fill_producer import (
+from lmcache.v1.remote_fill_producer import (
     RemoteFillFatalError,
     RemoteFillHandoff,
     RemoteFillProducerMetrics,
@@ -189,7 +192,7 @@ def test_probe_keeps_results_and_capacity_with_optional_perf(
 def test_remote_fill_rejects_vllm_sleep_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from lmcache_ascend.integration.vllm import vllm_v1_adapter
+    from lmcache.integration.vllm import vllm_v1_adapter
 
     config = SimpleNamespace(enable_remote_lmcache_store=True)
     vllm_config = SimpleNamespace(model_config=SimpleNamespace(enable_sleep_mode=True))
@@ -508,8 +511,7 @@ def test_static_negotiation_is_cached_for_decoder_epoch() -> None:
     assert _session(second_client, negotiation_cache=cache).open()
 
     assert (
-        sum(isinstance(item, NegotiateRequest) for item in first_client.requests)
-        == 1
+        sum(isinstance(item, NegotiateRequest) for item in first_client.requests) == 1
     )
     assert not any(
         isinstance(item, NegotiateRequest) for item in second_client.requests
@@ -802,10 +804,13 @@ def test_group0_local_is_internal_direct_success_with_public_persistent_only(
         item for item in client.requests if isinstance(item, NegotiateRequest)
     )
     assert negotiate.shared_group1 is False
-    assert any(
-        isinstance(item, StatusRequest) and item.window_id == -1
-        for item in client.requests
-    ) is lost_finish_reply
+    assert (
+        any(
+            isinstance(item, StatusRequest) and item.window_id == -1
+            for item in client.requests
+        )
+        is lost_finish_reply
+    )
 
 
 def test_ordinary_persistent_only_is_not_internal_direct_success() -> None:
@@ -918,9 +923,7 @@ def test_early_rejected_window_is_excluded_from_finish_manifest(
 
     assert not result.direct_satisfied
     assert result.reason == (
-        "probe result invalid"
-        if operation == "probe"
-        else "reservation result invalid"
+        "probe result invalid" if operation == "probe" else "reservation result invalid"
     )
     assert session.window_manifests == []
     assert terminal.outcome == "PERSISTENT_ONLY"
@@ -1255,9 +1258,10 @@ def test_lost_terminal_report_is_resolved_by_exact_status(
 
     assert result.direct_satisfied is direct_satisfied
     assert submitted == 1
-    assert sum(
-        isinstance(item, ReportTransferCompleteRequest) for item in client.requests
-    ) == 2
+    assert (
+        sum(isinstance(item, ReportTransferCompleteRequest) for item in client.requests)
+        == 2
+    )
     assert sum(isinstance(item, StatusRequest) for item in client.requests) == 1
 
 
@@ -1425,7 +1429,7 @@ def test_disabled_engine_path_creates_no_remote_work() -> None:
     state = _DirectStoreRequestState()
     engine = SimpleNamespace(config=SimpleNamespace(enable_remote_lmcache_store=False))
 
-    enabled = AscendLMCacheEngine._remote_fill_prepare_request(
+    enabled = LMCacheEngine._remote_fill_prepare_request(
         engine,
         "request",
         {"lmcache.remote_fill": asdict(_handoff())},
@@ -1442,12 +1446,12 @@ def test_disabled_engine_path_creates_no_remote_work() -> None:
 
 def test_malformed_handoff_is_visible_and_uses_persistent_fallback(caplog) -> None:
     state = _DirectStoreRequestState()
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(enable_remote_lmcache_store=True)
     _coordinator(engine)
 
     with caplog.at_level(logging.WARNING):
-        enabled = AscendLMCacheEngine._remote_fill_prepare_request(
+        enabled = LMCacheEngine._remote_fill_prepare_request(
             engine,
             "request",
             {"lmcache.remote_fill": {"transfer_id": 7}},
@@ -1608,7 +1612,7 @@ def test_disabled_queue_timing_preserves_capacity_accounting(monkeypatch):
         "time",
         SimpleNamespace(perf_counter=lambda: pytest.fail("diagnostic clock read")),
     )
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(
         remote_fill_max_inflight_bytes=100,
         remote_fill_max_bytes_per_request=400,
@@ -1627,7 +1631,7 @@ def test_disabled_queue_timing_preserves_capacity_accounting(monkeypatch):
 
 
 def test_global_producer_inflight_bytes_are_bounded_across_requests() -> None:
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(
         remote_fill_max_inflight_bytes=100,
         remote_fill_max_bytes_per_request=400,
@@ -1697,7 +1701,7 @@ def test_multi_window_batch_charges_all_retained_group0_bytes(
         executor_futures.append(future)
         return future
 
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(
         dsa_group1_load_mode="persistent_direct_hbm",
         # Each retained window is 10 bytes, but their one producer job owns
@@ -1715,7 +1719,7 @@ def test_multi_window_batch_charges_all_retained_group0_bytes(
     monkeypatch.setattr(
         coordinator_module,
         "build_remote_fill_source_plan",
-        lambda queued_batch: (source_plan_calls.append(queued_batch) or queued_batch),
+        lambda queued_batch: source_plan_calls.append(queued_batch) or queued_batch,
     )
     transfer_calls = []
     result = RemoteFillWindowResult(
@@ -1723,7 +1727,7 @@ def test_multi_window_batch_charges_all_retained_group0_bytes(
     )
     session = SimpleNamespace(
         direct_viable=True,
-        transfer_window=lambda **kwargs: (transfer_calls.append(kwargs) or result),
+        transfer_window=lambda **kwargs: transfer_calls.append(kwargs) or result,
     )
     _coordinator(engine)._create_session = lambda *_args: session
     engine.storage_manager = SimpleNamespace(
@@ -1784,7 +1788,7 @@ def test_multi_window_batch_charges_all_retained_group0_bytes(
 
 
 def test_direct_required_end_uses_authoritative_accepted_store_frontier() -> None:
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     state = _DirectStoreRequestState(accepted_store_end=768)
 
     assert engine._direct_required_end(state, list(range(1024))) == 768
@@ -1811,14 +1815,14 @@ def test_remote_fill_layout_is_bound_once_and_capability_is_request_scoped(
         return layout
 
     monkeypatch.setattr(
-        "lmcache_ascend.v1.cache_engine.mooncake_payload_layout",
+        "lmcache.v1.cache_engine.mooncake_payload_layout",
         payload_layout,
     )
     monkeypatch.setattr(
-        "lmcache_ascend.v1.cache_engine.build_decoder_layout",
+        "lmcache.v1.cache_engine.build_decoder_layout",
         decoder_layout,
     )
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine._engine_state_lock = RLock()
     engine.config = object()
     engine.metadata = object()
@@ -1827,9 +1831,12 @@ def test_remote_fill_layout_is_bound_once_and_capability_is_request_scoped(
     assert engine._remote_fill_immutable_layout() == ("payload-v3", layout)
     assert engine._remote_fill_immutable_layout() == ("payload-v3", layout)
     assert _handoff().descriptor_verification_key == _SECRET
-    assert _handoff(
-        descriptor_verification_capability=(b"d" * 32).hex()
-    ).descriptor_verification_key == b"d" * 32
+    assert (
+        _handoff(
+            descriptor_verification_capability=(b"d" * 32).hex()
+        ).descriptor_verification_key
+        == b"d" * 32
+    )
     assert calls == {"layout_tag": 1, "layout": 1}
 
 
@@ -1865,7 +1872,7 @@ def test_direct_page_batch_retains_same_owner_and_all_producer_events() -> None:
         ready_events=(event, second_event),
     )
     storage = _Storage()
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.storage_manager = storage
     engine._store_queue_maxsize = 0
     engine._direct_store_jobs = deque()
@@ -1927,7 +1934,7 @@ def test_persistent_and_direct_barriers_precede_finish_and_terminal_export() -> 
             futures=deque([_RecordingFuture("direct")]),
         ),
     )
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(blocking_timeout_secs=1, chunk_size=1024)
     engine._direct_store_states = {"request": state}
     engine._direct_retry_args = {}
@@ -1962,7 +1969,7 @@ def test_ambiguous_armed_window_blocks_finalize_and_release() -> None:
         committed_end={0: 1024, 1: 1024},
         remote_fill=ProducerRequestState(handoff=_handoff(), session=session),
     )
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(save_unfull_chunk=True, chunk_size=1024)
     engine._direct_store_states = {"request": state}
     engine._live_source_builders = {}
@@ -1995,7 +2002,7 @@ def test_remote_fill_requires_one_complete_source_page(
     expected: bool,
 ) -> None:
     assert (
-        AscendLMCacheEngine._remote_fill_has_addressable_source_page(
+        LMCacheEngine._remote_fill_has_addressable_source_page(
             token_end,
             slot_mapping_base,
             chunk_size,
@@ -2049,7 +2056,7 @@ def test_nonfinal_missing_fence_retains_windowed_sources(
     )
     metrics = _Metrics()
     scheduled: list[_DirectPageBatch] = []
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine._direct_store_enabled = True
     engine._direct_store_states = {"request": state}
     engine.storage_manager = _Storage()
@@ -2086,8 +2093,8 @@ def test_nonfinal_missing_fence_retains_windowed_sources(
         return {group: [(start, end, _Key(group, start))] for group in (0, 1)}
 
     engine._direct_suffix_plans = suffix_plans
-    engine._schedule_remote_fill_batch = (
-        lambda _state, batch, _required_end: scheduled.append(batch)
+    engine._schedule_remote_fill_batch = lambda _state, batch, _required_end: (
+        scheduled.append(batch)
     )
     group_caches = {0: [object()], 1: [object()]}
     slot_mappings = {0: object(), 1: object()}
@@ -2261,7 +2268,7 @@ def test_coordinator_fatal_report_is_immediate_and_weak(monkeypatch):
     import gc
     import weakref
 
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace()
     engine._remote_fill_fatal_transfers = ()
     engine._init_failed = False
@@ -2290,7 +2297,7 @@ def test_coordinator_fatal_report_is_immediate_and_weak(monkeypatch):
 
 
 def _queued_coordinator():
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(
         remote_fill_max_inflight_bytes=1024,
         remote_fill_max_bytes_per_request=4096,
@@ -2309,12 +2316,17 @@ def _queued_batch():
     pages = _pages()
     return _DirectPageBatch(
         req_id="request",
-        keys=[SimpleNamespace(kv_group=p.kv_group, to_string=lambda p=p: p.canonical_key) for p in pages],
+        keys=[
+            SimpleNamespace(kv_group=p.kv_group, to_string=lambda p=p: p.canonical_key)
+            for p in pages
+        ],
         ptrs=[[100 + p.kv_group] for p in pages],
         sizes=[[p.expected_bytes] for p in pages],
-        owners=(object(),), ready_event=object(),
+        owners=(object(),),
+        ready_event=object(),
         group_ends={0: 1024, 1: 1024},
-        ranges=((0, 1024), (0, 1024)), ready_events=(object(),),
+        ranges=((0, 1024), (0, 1024)),
+        ready_events=(object(),),
     )
 
 
@@ -2453,11 +2465,10 @@ def test_coordinator_preserves_order_and_releases_sources_with_gc_disabled():
             gc.enable()
 
 
-
 def test_coordinator_session_validation_stays_in_ordered_worker(monkeypatch):
     import threading
 
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     options = dict(
         remote_fill_max_rpc_message_bytes=65536,
         remote_fill_max_active_transactions=1024,
@@ -2575,7 +2586,7 @@ def test_fatal_cleanup_retains_prepared_owners_without_gc(
         "abort",
         lambda *_a: pytest.fail("cleanup attempted ABORT"),
     )
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(remote_fill_native_hard_timeout_ms=120000)
     engine._remote_fill_fatal_transfers = ()
     engine._init_failed = False
@@ -2624,7 +2635,7 @@ def test_fatal_cleanup_retains_prepared_owners_without_gc(
     "request_configs", [None, {}, {"lmcache.remote_fill": None}, []]
 )
 def test_coordinator_absent_handoff_keeps_persistent_state_lazy(request_configs):
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(enable_remote_lmcache_store=True)
     state = _DirectStoreRequestState()
     assert not engine._remote_fill_prepare_request("request", request_configs, state)
@@ -2641,11 +2652,11 @@ def test_coordinator_absent_handoff_keeps_persistent_state_lazy(request_configs)
 def test_coordinator_finish_once_exports_partial_terminal_through_ascend_adapter(
     monkeypatch,
 ):
-    from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
-        LMCacheAscendConnectorV1Impl,
+    from lmcache.integration.vllm.vllm_v1_adapter import (
+        LMCacheConnectorV1Impl,
     )
 
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(chunk_size=1024)
     calls = []
     terminal = RemoteFillTerminalResult(
@@ -2683,11 +2694,11 @@ def test_coordinator_finish_once_exports_partial_terminal_through_ascend_adapter
     assert coordinator.drain_terminal_results() == {}
 
     monkeypatch.setattr(
-        LMCacheAscendConnectorV1Impl.__mro__[1],
+        LMCacheConnectorV1Impl.__mro__[1],
         "request_finished",
         lambda *_args: (False, {"first_tok": 7}),
     )
-    adapter = object.__new__(LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(LMCacheConnectorV1Impl)
     adapter._scheduler_live_sources = {}
     adapter._scheduler_remote_fill_results = exported
     adapter.store_async = True
@@ -2717,8 +2728,8 @@ def test_coordinator_ascend_preemption_preserves_real_engine_drop_ownership(fata
     import gc
     import weakref
     from dataclasses import replace
-    from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
-        LMCacheAscendConnectorV1Impl,
+    from lmcache.integration.vllm.vllm_v1_adapter import (
+        LMCacheConnectorV1Impl,
     )
 
     class Owner:
@@ -2737,7 +2748,7 @@ def test_coordinator_ascend_preemption_preserves_real_engine_drop_ownership(fata
         PreparedDirectPushSource(source, 0, 0, 0),
     )
     session.fatal_restart_required = fatal
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(blocking_timeout_secs=1)
     state = _DirectStoreRequestState(
         remote_fill=ProducerRequestState(handoff=_handoff(), session=session)
@@ -2750,9 +2761,9 @@ def test_coordinator_ascend_preemption_preserves_real_engine_drop_ownership(fata
     engine._init_failed = False
     engine._health_monitor = None
     order = []
-    engine.wait_for_pending_stores = lambda _ids: (order.append("persistent") or set())
+    engine.wait_for_pending_stores = lambda _ids: order.append("persistent") or set()
     _coordinator(engine)
-    adapter = object.__new__(LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(LMCacheConnectorV1Impl)
     adapter.lmcache_engine = engine
     adapter.store_async = True
     adapter.kv_role = "kv_producer"
@@ -2785,7 +2796,7 @@ def test_coordinator_late_window_updates_only_original_request_handle():
     jobs = []
     future = Future()
     coordinator._executor = SimpleNamespace(
-        submit=lambda job: (jobs.append(job) or future)
+        submit=lambda job: jobs.append(job) or future
     )
     old = ProducerRequestState(
         handoff=_handoff(transfer_id="old"), source_generation=11
@@ -2826,7 +2837,7 @@ def test_coordinator_repeated_finish_drop_releases_sources_without_gc():
     class Owner:
         pass
 
-    engine = object.__new__(AscendLMCacheEngine)
+    engine = object.__new__(LMCacheEngine)
     engine.config = SimpleNamespace(chunk_size=1024)
     engine._direct_store_states = {}
     engine._live_source_builders = {}

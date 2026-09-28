@@ -17,7 +17,7 @@ from lmcache.v1.gpu_connector.gpu_connectors import (
     VLLMPagedMemGPUConnectorV3,
     VLLMPagedMemLayerwiseGPUConnector,
 )
-from lmcache.v1.gpu_connector.utils import (
+from lmcache.v1.device_connector.utils import (
     get_dtype,
     permute_kv_caches_to_contiguous,
 )

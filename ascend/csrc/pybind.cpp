@@ -235,7 +235,29 @@ py::tuple dense_mla_dsa_group_direct_kv_transfer_fast_wrapper(
   return py::make_tuple(host_pointer_rows, layer_chunk_ptrs_npu);
 }
 
+// Historical public layout tags; values are shared with the Python layout
+// utilities. Defining them here replaces import-time IntEnum injection.
+enum class GPUKVFormat {
+  NB_NL_TWO_BS_NH_HS = 0,
+  NL_X_TWO_NB_BS_NH_HS = 1,
+  NL_X_NB_TWO_BS_NH_HS = 2,
+  NL_X_NB_BS_HS = 3,
+  TWO_X_NL_X_NBBS_NH_HS = 4,
+  NL_X_NBBS_ONE_HS = 5,
+  NL_X_TWO_NB_NH_BS_HS = 6,
+  NL_X_NB_TWO_NH_BS_HS = 7,
+};
+
 PYBIND11_MODULE(c_ops, m) {
+  py::enum_<GPUKVFormat>(m, "GPUKVFormat")
+      .value("NB_NL_TWO_BS_NH_HS", GPUKVFormat::NB_NL_TWO_BS_NH_HS)
+      .value("NL_X_TWO_NB_BS_NH_HS", GPUKVFormat::NL_X_TWO_NB_BS_NH_HS)
+      .value("NL_X_NB_TWO_BS_NH_HS", GPUKVFormat::NL_X_NB_TWO_BS_NH_HS)
+      .value("NL_X_NB_BS_HS", GPUKVFormat::NL_X_NB_BS_HS)
+      .value("TWO_X_NL_X_NBBS_NH_HS", GPUKVFormat::TWO_X_NL_X_NBBS_NH_HS)
+      .value("NL_X_NBBS_ONE_HS", GPUKVFormat::NL_X_NBBS_ONE_HS)
+      .value("NL_X_TWO_NB_NH_BS_HS", GPUKVFormat::NL_X_TWO_NB_NH_BS_HS)
+      .value("NL_X_NB_TWO_NH_BS_HS", GPUKVFormat::NL_X_NB_TWO_NH_BS_HS);
   m.def("dense_mla_dsa_group_direct_kv_transfer_prepared",
         [](const py::sequence &objects, torch::Tensor &slots,
            torch::Tensor &pointers, torch::Tensor &offsets,

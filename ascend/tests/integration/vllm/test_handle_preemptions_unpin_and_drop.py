@@ -11,12 +11,12 @@ import pytest
 pytest.importorskip("lmcache")
 pytest.importorskip("vllm")
 
-adapter_mod = pytest.importorskip("lmcache_ascend.integration.vllm.vllm_v1_adapter")
+adapter_mod = pytest.importorskip("lmcache.integration.vllm.vllm_v1_adapter")
 from lmcache.integration.vllm.vllm_v1_adapter import WorkerRetrieveState
 
 
 def _make_adapter(**kwargs):
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     adapter.store_async = kwargs.get("store_async", False)
     adapter.kv_role = kwargs.get("kv_role", "kv_both")
     engine = kwargs.get("lmcache_engine", MagicMock())
@@ -39,7 +39,7 @@ def test_handle_preemptions_unpins_and_drops_worker_state() -> None:
 
 
 def test_handle_preemptions_without_engine_is_safe() -> None:
-    adapter = object.__new__(adapter_mod.LMCacheAscendConnectorV1Impl)
+    adapter = object.__new__(adapter_mod.LMCacheConnectorV1Impl)
     adapter.store_async = False
     adapter.kv_role = "kv_both"
     adapter._manager = SimpleNamespace(lmcache_engine=None)

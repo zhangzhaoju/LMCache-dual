@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 # Third Party
 import torch
+import torch_npu  # noqa: F401
 
 # First Party
 from lmcache.v1.remote_fill.protocol import DestinationPageDescriptor

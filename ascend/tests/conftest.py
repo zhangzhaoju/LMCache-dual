@@ -10,7 +10,8 @@ import pytest
 # Local
 from .bootstrap import TEST_ALIAS, prepare_environment
 
-# Skip multiprocess tests entirely — NPU does not support IPC sharing
+# The historical multiprocess cache server was never implemented for Ascend.
+# IPC wrapper tests can be selected explicitly with --noconftest.
 collect_ignore_glob = ["v1/multiprocess/test_*.py"]
 
 # ==============================================================================
@@ -28,13 +29,13 @@ except Exception as e:
 def setup_npu_backend():
     try:
         # First Party
-        from lmcache_ascend import _build_info
+        from lmcache import _build_info
 
         print(f"\n⚡ [NPU Setup] Detected framework: {_build_info.__framework_name__}")
 
         if _build_info.__framework_name__ == "pytorch":
             # Third Party
-            from torch_npu.contrib import transfer_to_npu  # noqa: F401
+            import torch_npu  # noqa: F401
             import torch
 
             # Sanity check
@@ -42,7 +43,9 @@ def setup_npu_backend():
             print("   ✅ NPU Backend initialized successfully.")
 
     except ImportError as e:
-        pytest.exit(f"❌ lmcache_ascend or torch_npu not found: {e}", returncode=1)
+        pytest.exit(
+            f"❌ Native lmcache build or torch_npu not found: {e}", returncode=1
+        )
 
 
 def patch_lmcache_test_utils():

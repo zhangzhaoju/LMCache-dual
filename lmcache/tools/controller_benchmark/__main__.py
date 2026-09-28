@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 #!/usr/bin/env python3
 """
 LMCache Controller ZMQ Benchmark Tool - CLI Entry Point

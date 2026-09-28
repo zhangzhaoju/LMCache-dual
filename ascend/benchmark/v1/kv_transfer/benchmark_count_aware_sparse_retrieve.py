@@ -38,7 +38,7 @@ from load_benchmark_utils import (  # noqa: E402
     recommended_num_blocks,
     time_npu_callable,
 )
-from lmcache_ascend.v1.npu_connector.utils import (  # noqa: E402
+from lmcache.v1.npu_connector.utils import (  # noqa: E402
     sparse_mla_dsa_batched_direct_kv_transfer_prepared,
 )
 

@@ -11,7 +11,7 @@ import pytest
 import torch
 
 # First Party
-import lmcache_ascend.c_ops as lmc_ops
+import lmcache.c_ops as lmc_ops
 
 
 @pytest.mark.parametrize("num_tokens", [256, 500, 1024, 8000])

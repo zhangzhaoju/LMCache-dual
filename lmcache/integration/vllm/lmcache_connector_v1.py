@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
+# Standard
 from typing import TYPE_CHECKING, Any, Optional
 
 # Third Party
@@ -25,15 +26,19 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 
+if TYPE_CHECKING:
+    # Third Party
+    from vllm.v1.kv_cache_interface import KVCacheConfig
+
+
 class LMCacheConnectorV1Dynamic(KVConnectorBase_V1, SupportsHMA):
-    def __init__(
+    def _common_init(
         self,
         vllm_config: "VllmConfig",
         role: KVConnectorRole,
         kv_cache_config: Optional[Any] = None,
     ):
-        # Resolve the implementation after platform patches, including when
-        # this dynamic wrapper was imported before lmcache-ascend.
+        # Lazy import keeps the serving framework optional until construction.
         from lmcache.integration.vllm.vllm_v1_adapter import LMCacheConnectorV1Impl
 
         if kv_cache_config is not None:
@@ -62,7 +67,9 @@ class LMCacheConnectorV1Dynamic(KVConnectorBase_V1, SupportsHMA):
     @property
     def supports_preemption_checkpoint(self) -> bool:
         """Whether this connector requests pre-overwrite decoder snapshots."""
-        return bool(getattr(self._lmcache_engine.config, "decode_preemption_checkpoint", False))
+        return bool(
+            getattr(self._lmcache_engine.config, "decode_preemption_checkpoint", False)
+        )
 
     def handle_preemptions(self, preempted_req_ids: set[str]) -> None:
         """Drain source owners before the runner reuses preempted blocks."""
@@ -103,15 +110,10 @@ class LMCacheConnectorV1Dynamic(KVConnectorBase_V1, SupportsHMA):
         that upgrading LMCache without a hybrid-capable transport cannot make
         an older consumer reject the otherwise valid group-1 descriptor.
         """
-        configure = getattr(
-            self._lmcache_engine, "configure_live_latent_source", None
-        )
+        configure = getattr(self._lmcache_engine, "configure_live_latent_source", None)
         if callable(configure):
             configure(enabled)
 
-    # ==============================
-    # Worker-side methods
-    # ==============================
     def register_kv_caches(self, kv_caches: dict[str, torch.Tensor]):
         """
         Initialize with the KV caches. Useful for pre-registering the
@@ -126,9 +128,7 @@ class LMCacheConnectorV1Dynamic(KVConnectorBase_V1, SupportsHMA):
         self, handled_groups: tuple[int, ...]
     ) -> dict[str, dict[str, Any]]:
         """Internal worker hook consumed by AscendMultiConnector."""
-        return self._lmcache_engine.take_live_split_destination_plans(
-            handled_groups
-        )
+        return self._lmcache_engine.take_live_split_destination_plans(handled_groups)
 
     def _accept_live_split_results(self, results: dict[str, str]) -> None:
         """Internal worker hook for negotiated live-transfer acknowledgements."""
@@ -261,9 +261,6 @@ class LMCacheConnectorV1Dynamic(KVConnectorBase_V1, SupportsHMA):
         """
         return self._lmcache_engine.shutdown()
 
-    # ==============================
-    # Scheduler-side methods
-    # ==============================
     def get_num_new_matched_tokens(
         self,
         request: "Request",
@@ -326,9 +323,7 @@ class LMCacheConnectorV1Dynamic(KVConnectorBase_V1, SupportsHMA):
     def update_connector_worker_metadata(
         self, worker_metadata: Any, active_req_ids: set[str]
     ) -> None:
-        update = getattr(
-            self._lmcache_engine, "update_connector_worker_metadata", None
-        )
+        update = getattr(self._lmcache_engine, "update_connector_worker_metadata", None)
         if callable(update):
             update(worker_metadata, active_req_ids)
 
@@ -357,3 +352,80 @@ class LMCacheConnectorV1Dynamic(KVConnectorBase_V1, SupportsHMA):
         # LMCache's layerwise DSA path owns both groups, while its scheduler
         # completion bookkeeping is keyed by the primary group's block table.
         return self.request_finished(request, block_ids[0])
+
+    supports_dsa_index_lmcache = True
+
+    @property
+    def uses_layerwise_model_callbacks(self) -> bool:
+        """Whether model-layer Python callbacks are part of this execution."""
+        return bool(getattr(self._lmcache_engine, "use_layerwise", False))
+
+    @property
+    def supports_staged_sfa_sparse_load(self) -> bool:
+        """Advertise the exact staged-SFA selective-load contract."""
+        engine = self._lmcache_engine
+        config = getattr(engine, "config", None)
+        return bool(
+            getattr(engine, "use_layerwise", False)
+            and getattr(engine, "kv_role", None) in ("kv_both", "kv_consumer")
+            and getattr(config, "dsa_two_groups", False)
+            and getattr(config, "enable_sparse_attention", False)
+        )
+
+    def __init__(
+        self,
+        vllm_config: "VllmConfig",
+        role: KVConnectorRole,
+        kv_cache_config: Optional["KVCacheConfig"] = None,
+    ) -> None:
+        transfer = getattr(vllm_config, "kv_transfer_config", None)
+        parallel = getattr(vllm_config, "parallel_config", None)
+        if transfer is not None and parallel is not None:
+            extra = dict(getattr(transfer, "kv_connector_extra_config", None) or {})
+            dp_rank = getattr(parallel, "data_parallel_index", None)
+            if dp_rank is None:
+                dp_rank = getattr(parallel, "data_parallel_rank_local", 0)
+            extra["lmcache_remote_fill_destination_dp_rank"] = int(dp_rank or 0)
+            extra["lmcache_remote_fill_destination_dp_size"] = int(
+                getattr(parallel, "data_parallel_size", 1) or 1
+            )
+            transfer.kv_connector_extra_config = extra
+        self._common_init(
+            vllm_config=vllm_config, role=role, kv_cache_config=kv_cache_config
+        )
+
+    def capture_live_source_event_handoff(self, forward_context: Any) -> bool:
+        """Forward an armed post-forward producer event to the implementation."""
+
+        return bool(
+            self._lmcache_engine.capture_live_source_event_handoff(forward_context)
+        )
+
+    def seal_sparse_destination_layout(self) -> None:
+        """Forward the final staged-capture storage contract when supported."""
+        seal = getattr(self._lmcache_engine, "seal_sparse_destination_layout", None)
+        if callable(seal):
+            seal()
+
+    def get_remote_fill_placement_info(
+        self,
+    ) -> dict[str, int | str | bool] | None:
+        """Return the decoder's pointer-free remote-fill placement."""
+
+        engine = getattr(self._lmcache_engine, "lmcache_engine", None)
+        discover = getattr(engine, "get_remote_fill_placement_info", None)
+        return discover() if callable(discover) else None
+
+    def get_remote_fill_metrics(self) -> dict[str, int] | None:
+        """Return fixed-cardinality decoder protocol metrics when active."""
+
+        engine = getattr(self._lmcache_engine, "lmcache_engine", None)
+        snapshot = getattr(engine, "get_remote_fill_metrics", None)
+        return snapshot() if callable(snapshot) else None
+
+    def remote_fill_requires_paired_restart(self) -> bool:
+        """Expose an armed-transfer fatal latch to the worker supervisor."""
+
+        engine = getattr(self._lmcache_engine, "lmcache_engine", None)
+        check = getattr(engine, "remote_fill_requires_paired_restart", None)
+        return bool(check()) if callable(check) else False

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Helpers for direct-vs-staging KV load micro-benchmarks."""
+
 from __future__ import annotations
 
 # Standard
@@ -18,7 +19,7 @@ def ensure_ascend_host_memory_registered() -> None:
         pass
 
     try:
-        import lmcache_ascend.c_ops as ascend_c_ops
+        import lmcache.c_ops as ascend_c_ops
     except ImportError:
         return
 
@@ -36,7 +37,7 @@ from lmcache.v1.memory_management import MemoryObj, PinMemoryAllocator
 import torch
 
 # First Party
-from lmcache_ascend.v1.npu_connector.utils import (
+from lmcache.v1.npu_connector.utils import (
     batched_fused_single_layer_kv_transfer,
     dense_mla_dsa_batched_direct_kv_transfer,
     dense_mla_dsa_batched_direct_kv_transfer_fast,
@@ -355,8 +356,7 @@ def allocate_stacked_cpu_chunks_from_slab(
         end = offset + logical_bytes
         if end > slab.numel():
             raise RuntimeError(
-                f"shared CPU slab is too small: need {end} B, "
-                f"have {slab.numel()} B"
+                f"shared CPU slab is too small: need {end} B, have {slab.numel()} B"
             )
         chunks.append(slab[offset:end].view(dtype))
         offset += _align_up(logical_bytes)
@@ -399,7 +399,7 @@ def build_chunk_ptrs_npu(
     cpu_tensors: Sequence[torch.Tensor],
     device: torch.device,
 ) -> torch.Tensor:
-    import lmcache_ascend.c_ops as lmc_ops
+    import lmcache.c_ops as lmc_ops
 
     dev_ptrs = []
     for i, tensor in enumerate(cpu_tensors):
@@ -679,7 +679,9 @@ def build_load_benchmark_harness(
         slot_mapping_full, selected_token_idx
     )
 
-    staging_cache = torch.empty(num_tokens * dims.plane_elems, dtype=dtype, device=device)
+    staging_cache = torch.empty(
+        num_tokens * dims.plane_elems, dtype=dtype, device=device
+    )
     if fixed_chunk_size > 0:
         chunk_offsets_npu = torch.empty(1, dtype=torch.int32, device=device)
         chunk_sizes_npu = torch.empty(1, dtype=torch.int32, device=device)
@@ -1014,8 +1016,7 @@ def _assert_stacked_cpu_chunks_equal(
             zip(actual_layer, expected_layer, strict=False)
         ):
             assert torch.equal(actual, expected), (
-                f"{label}: CPU chunk mismatch layer={layer_id} "
-                f"chunk={chunk_id}"
+                f"{label}: CPU chunk mismatch layer={layer_id} chunk={chunk_id}"
             )
 
 

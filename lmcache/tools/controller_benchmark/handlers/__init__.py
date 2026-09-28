@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Operation handlers with dynamic discovery and registration"""
 
 # SPDX-License-Identifier: Apache-2.0

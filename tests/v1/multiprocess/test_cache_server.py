@@ -20,7 +20,7 @@ from lmcache.v1.distributed.config import (
 from lmcache.v1.mp_observability.config import DEFAULT_OBSERVABILITY_CONFIG
 from lmcache.v1.multiprocess.config import MPServerConfig
 from lmcache.v1.multiprocess.custom_types import (
-    CudaIPCWrapper,
+    NPUIPCWrapper,
     IPCCacheEngineKey,
     KVCache,
 )
@@ -115,9 +115,9 @@ class ClientContext:
 
     def get_kv_cache(self) -> KVCache:
         """
-        Wrap GPU tensors in CudaIPCWrapper for IPC communication.
+        Wrap GPU tensors in NPUIPCWrapper for IPC communication.
         """
-        return [CudaIPCWrapper(tensor) for tensor in self.gpu_kv_caches]
+        return [NPUIPCWrapper(tensor) for tensor in self.gpu_kv_caches]
 
     def get_tensor_slice(
         self, layer: int, start_page: int, num_pages: int

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Base handler class for benchmark operations (Strategy Pattern)"""
 
 # SPDX-License-Identifier: Apache-2.0

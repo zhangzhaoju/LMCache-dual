@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Minimal reproducer for the MLA/DSA sparse multi-chunk direct kernel."""
+
 from __future__ import annotations
 
 import sys
@@ -48,7 +49,7 @@ def test_mla_sparse_multi_chunk_direct_kernel_writes_selected_tokens() -> None:
         build_chunk_ptrs_npu,
         ensure_ascend_host_memory_registered,
     )
-    from lmcache_ascend.v1.npu_connector.utils import (
+    from lmcache.v1.npu_connector.utils import (
         sparse_mla_dsa_batched_direct_kv_transfer,
     )
 
@@ -202,7 +203,7 @@ def test_mla_dense_multi_chunk_direct_kernel_loads_and_offloads_all_tokens(
         build_chunk_ptrs_npu,
         ensure_ascend_host_memory_registered,
     )
-    from lmcache_ascend.v1.npu_connector.utils import (
+    from lmcache.v1.npu_connector.utils import (
         dense_mla_dsa_batched_direct_kv_transfer,
         dense_mla_dsa_batched_direct_kv_transfer_prepared,
         prepare_sparse_direct_destination_state,
@@ -212,9 +213,7 @@ def test_mla_dense_multi_chunk_direct_kernel_loads_and_offloads_all_tokens(
 
     device = torch.device("npu")
     dtype = torch.bfloat16
-    kv_format = (
-        KV_FORMAT_MLA if kv_format_name == "mla" else KV_FORMAT_MLA_LATENT
-    )
+    kv_format = KV_FORMAT_MLA if kv_format_name == "mla" else KV_FORMAT_MLA_LATENT
     chunk_size = 4
     num_chunks = 2
     total_tokens = chunk_size * num_chunks
@@ -359,7 +358,7 @@ def test_dsa_index_dense_multi_chunk_direct_kernel_roundtrip() -> None:
         build_chunk_ptrs_npu,
         ensure_ascend_host_memory_registered,
     )
-    from lmcache_ascend.v1.npu_connector.utils import (
+    from lmcache.v1.npu_connector.utils import (
         dense_mla_dsa_batched_direct_kv_transfer,
     )
 

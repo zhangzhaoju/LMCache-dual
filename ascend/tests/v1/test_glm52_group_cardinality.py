@@ -7,7 +7,7 @@ Covers the design contract:
   caches at layout initialization (79 latent / 22 indexer).
 - Connector get_num_layers/get_layer_indices/_expected_group_layers with
   fail-closed DSA and the legacy single-group fallback.
-- AscendLMCacheEngine._num_layers_for_kv_group: connector layout preferred,
+- LMCacheEngine._num_layers_for_kv_group: connector layout preferred,
   engine-level resolution fallback, disagreement fail-closed.
 - _num_transfer_layers_for_call fail-closes against the per-group kvcaches
   list.
@@ -16,6 +16,7 @@ Covers the design contract:
   no-key yield cadence.
 - _append_retrieve_layer_cache initializes cached rows at the group count.
 """
+
 # Standard
 from types import SimpleNamespace
 from typing import Optional
@@ -26,11 +27,11 @@ import torch
 
 # First Party
 from lmcache.utils import CacheEngineKey
-from lmcache_ascend.v1 import cache_engine as ascend_engine_module
-from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine
-from lmcache_ascend.v1.kv_format import KVCacheFormat
-from lmcache_ascend.v1.npu_connector import npu_connectors
-from lmcache_ascend.v1.npu_connector.npu_connectors import (
+from lmcache.v1 import cache_engine as ascend_engine_module
+from lmcache.v1.cache_engine import LMCacheEngine
+from lmcache.v1.kv_format import KVCacheFormat
+from lmcache.v1.npu_connector import npu_connectors
+from lmcache.v1.npu_connector.npu_connectors import (
     _GroupLayout,
     VLLMPagedMemLayerwiseNPUConnector,
 )
@@ -50,10 +51,7 @@ def _latent_caches(layers: int):
 
 
 def _indexer_caches(layers: int):
-    return [
-        (torch.zeros(4, 128, 1, 128, dtype=torch.bfloat16),)
-        for _ in range(layers)
-    ]
+    return [(torch.zeros(4, 128, 1, 128, dtype=torch.bfloat16),) for _ in range(layers)]
 
 
 def _layout_for_format(kv_format: KVCacheFormat, num_layers: int) -> _GroupLayout:
@@ -72,22 +70,14 @@ def _connector_with_layouts(
     connector._current_kv_group = 0
     connector.num_layers = LATENT_LAYERS
     connector.dsa_two_groups = dsa_two_groups
-    connector.get_num_layers = (
-        lambda kv_group=0: VLLMPagedMemLayerwiseNPUConnector.get_num_layers(
-            connector, kv_group
-        )
+    connector.get_num_layers = lambda kv_group=0: (
+        VLLMPagedMemLayerwiseNPUConnector.get_num_layers(connector, kv_group)
     )
-    connector.get_layer_indices = (
-        lambda kv_group=0: VLLMPagedMemLayerwiseNPUConnector.get_layer_indices(
-            connector, kv_group
-        )
+    connector.get_layer_indices = lambda kv_group=0: (
+        VLLMPagedMemLayerwiseNPUConnector.get_layer_indices(connector, kv_group)
     )
-    connector._expected_group_layers = (
-        lambda kv_group=None: (
-            VLLMPagedMemLayerwiseNPUConnector._expected_group_layers(
-                connector, kv_group
-            )
-        )
+    connector._expected_group_layers = lambda kv_group=None: (
+        VLLMPagedMemLayerwiseNPUConnector._expected_group_layers(connector, kv_group)
     )
     return connector
 
@@ -101,9 +91,7 @@ class TestGroupLayoutCardinality:
     def test_get_num_layers_uses_registered_layout(self):
         connector = _connector_with_layouts(
             {
-                0: _layout_for_format(
-                    KVCacheFormat.MLA_LATENT, LATENT_LAYERS
-                ),
+                0: _layout_for_format(KVCacheFormat.MLA_LATENT, LATENT_LAYERS),
                 1: _layout_for_format(KVCacheFormat.DSA_INDEX, INDEXER_LAYERS),
             }
         )
@@ -113,9 +101,7 @@ class TestGroupLayoutCardinality:
     def test_get_layer_indices_per_group(self):
         connector = _connector_with_layouts(
             {
-                0: _layout_for_format(
-                    KVCacheFormat.MLA_LATENT, LATENT_LAYERS
-                ),
+                0: _layout_for_format(KVCacheFormat.MLA_LATENT, LATENT_LAYERS),
                 1: _layout_for_format(KVCacheFormat.DSA_INDEX, INDEXER_LAYERS),
             }
         )
@@ -139,17 +125,15 @@ class TestGroupLayoutCardinality:
 def _engine_for_cardinality(
     connector_layers: Optional[dict[int, int]],
     engine_group_layers: dict[int, int],
-) -> AscendLMCacheEngine:
-    engine = AscendLMCacheEngine.__new__(AscendLMCacheEngine)
+) -> LMCacheEngine:
+    engine = LMCacheEngine.__new__(LMCacheEngine)
     engine.num_layers = LATENT_LAYERS
     if connector_layers is None:
         engine.gpu_connector = SimpleNamespace()
     else:
         layouts = {
             group: _layout_for_format(
-                KVCacheFormat.DSA_INDEX
-                if group == 1
-                else KVCacheFormat.MLA_LATENT,
+                KVCacheFormat.DSA_INDEX if group == 1 else KVCacheFormat.MLA_LATENT,
                 layers,
             )
             for group, layers in connector_layers.items()
@@ -187,15 +171,10 @@ class TestEngineNumLayersForKvGroup:
             {0: LATENT_LAYERS, 1: INDEXER_LAYERS}, {0: 79, 1: 22}
         )
         assert (
-            engine._num_transfer_layers_for_call(
-                1, {"kvcaches": [object()] * 22}
-            )
-            == 22
+            engine._num_transfer_layers_for_call(1, {"kvcaches": [object()] * 22}) == 22
         )
         with pytest.raises(ValueError, match="cardinality mismatch"):
-            engine._num_transfer_layers_for_call(
-                1, {"kvcaches": [object()] * 79}
-            )
+            engine._num_transfer_layers_for_call(1, {"kvcaches": [object()] * 79})
 
 
 class _FakeLayerKey:
@@ -216,13 +195,9 @@ class _FakeLayerKey:
 
     def split_layers(self, num_layers: int):
         if self.deps is not None:
-            self.deps.split_sizes.setdefault(self.kv_group, []).append(
-                num_layers
-            )
+            self.deps.split_sizes.setdefault(self.kv_group, []).append(num_layers)
         return [
-            _FakeLayerKey(
-                self.chunk_id, i, self.deps, kv_group=self.kv_group
-            )
+            _FakeLayerKey(self.chunk_id, i, self.deps, kv_group=self.kv_group)
             for i in range(num_layers)
         ]
 
@@ -239,9 +214,9 @@ class _StoreDeps:
 
 
 def _store_layer_engine(group_layers: int):
-    """Build a minimal AscendLMCacheEngine for an indexer store_layer run."""
+    """Build a minimal LMCacheEngine for an indexer store_layer run."""
     deps = _StoreDeps(group_layers)
-    engine = AscendLMCacheEngine.__new__(AscendLMCacheEngine)
+    engine = LMCacheEngine.__new__(LMCacheEngine)
     engine.num_layers = LATENT_LAYERS
     engine.gpu_connector = _connector_with_layouts(
         {1: _layout_for_format(KVCacheFormat.DSA_INDEX, group_layers)}
@@ -325,9 +300,7 @@ def _store_layer_engine(group_layers: int):
 
 class TestStoreLayerIndexerGroup:
     def test_indexer_group_transfers_22_rows(self, monkeypatch):
-        monkeypatch.setattr(
-            ascend_engine_module, "CacheEngineKey", _FakeLayerKey
-        )
+        monkeypatch.setattr(ascend_engine_module, "CacheEngineKey", _FakeLayerKey)
         monkeypatch.setattr(
             ascend_engine_module,
             "assert_layerwise_gpu_connector",
@@ -350,9 +323,7 @@ class TestStoreLayerIndexerGroup:
         assert sorted(deps.put_layers) == list(range(INDEXER_LAYERS))
 
     def test_kvcaches_mismatch_fails_closed(self, monkeypatch):
-        monkeypatch.setattr(
-            ascend_engine_module, "CacheEngineKey", _FakeLayerKey
-        )
+        monkeypatch.setattr(ascend_engine_module, "CacheEngineKey", _FakeLayerKey)
         engine, _deps = _store_layer_engine(INDEXER_LAYERS)
         with pytest.raises(ValueError, match="cardinality mismatch"):
             list(
@@ -367,9 +338,7 @@ class TestStoreLayerIndexerGroup:
     def test_unhealthy_cadence_uses_group_count(self):
         engine, _deps = _store_layer_engine(INDEXER_LAYERS)
         engine.is_healthy = lambda: False
-        results = list(
-            engine.store_layer([1, 2, 3, 4], kv_group=1, req_id="req")
-        )
+        results = list(engine.store_layer([1, 2, 3, 4], kv_group=1, req_id="req"))
         assert len(results) == INDEXER_LAYERS + 1
 
 

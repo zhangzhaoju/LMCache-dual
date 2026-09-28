@@ -60,7 +60,7 @@ def classes():
     engine = next(
         n
         for n in source.body
-        if isinstance(n, ast.ClassDef) and n.name == "AscendLMCacheEngine"
+        if isinstance(n, ast.ClassDef) and n.name == "LMCacheEngine"
     )
     engine.bases = [ast.Name(id="Base", ctx=ast.Load())]
     engine.body = [
@@ -92,7 +92,7 @@ def classes():
 @pytest.mark.parametrize("ready", [True, False])
 def test_marker_cannot_be_overtaken_by_an_unrelated_broadcast(ready):
     ns = classes()
-    cls = ns["AscendLMCacheEngine"]
+    cls = ns["LMCacheEngine"]
     queues = [Queue() for _ in range(2)]
     reduction = Barrier(2)
     flags = [None, None]
@@ -162,7 +162,7 @@ def test_marker_cannot_be_overtaken_by_an_unrelated_broadcast(ready):
 
 def test_unrelated_envelope_does_not_call_consensus():
     ns = classes()
-    cls = ns["AscendLMCacheEngine"]
+    cls = ns["LMCacheEngine"]
     envelope = NS(phase="ordinary")
     ns["Base"]._receive_shared_envelope = lambda self: envelope
     obj = cls()
@@ -177,7 +177,7 @@ def test_armed_transport_does_not_create_an_engine_cycle_with_gc_disabled():
     import gc, weakref
 
     ns = classes()
-    cls = ns["AscendLMCacheEngine"]
+    cls = ns["LMCacheEngine"]
     ns["Base"]._receive_shared_envelope = lambda self: None
     enabled = gc.isenabled()
     gc.disable()
@@ -194,7 +194,7 @@ def test_armed_transport_does_not_create_an_engine_cycle_with_gc_disabled():
 
 def test_remote_fill_and_checkpoint_reductions_follow_leader_order():
     ns = classes()
-    cls = ns["AscendLMCacheEngine"]
+    cls = ns["LMCacheEngine"]
     queue = Queue()
     barrier = Barrier(2)
     flags = [None, None]
@@ -248,7 +248,7 @@ def test_remote_fill_and_checkpoint_reductions_follow_leader_order():
 
 def test_agreement_does_not_expire_before_the_existing_native_read_deadline():
     ns = classes()
-    cls = ns["AscendLMCacheEngine"]
+    cls = ns["LMCacheEngine"]
     obj = cls()
     obj.shared_cpu_cache_generation = 1
     obj.shared_cpu_cache_strict = True

@@ -21,7 +21,7 @@ from lmcache.v1.config_base import apply_remote_configs, fetch_remote_config
 
 if TYPE_CHECKING:
     # First Party
-    from lmcache.v1.gpu_connector.utils import LayoutHints
+    from lmcache.v1.device_connector.utils import LayoutHints
 
 logger = init_logger(__name__)
 ENGINE_NAME = "vllm-instance"
@@ -339,28 +339,12 @@ def get_size_bytes(shapes: list[torch.Size], kv_dtypes: list[torch.dtype]):
 
 
 def get_vllm_torch_dev():
-    """
-    Returns the torch device and device name for the vLLM engine.
-    e.g. (torch.cuda, "cuda") or (torch.xpu, "xpu")
-    """
-    # Third Party
-    from vllm.platforms import current_platform
+    """Return the explicit NPU device API; fail if no NPU is available."""
+    import torch_npu  # noqa: F401
 
-    if current_platform.is_cuda_alike():
-        logger.info("CUDA device is available. Using CUDA for LMCache engine.")
-        torch_dev = torch.cuda
-        dev_name = "cuda"
-    elif current_platform.is_xpu():
-        logger.info("XPU device is available. Using XPU for LMCache engine.")
-        torch_dev = torch.xpu
-        dev_name = "xpu"
-    elif hasattr(torch, "hpu") and torch.hpu.is_available():
-        logger.info("HPU device is available. Using HPU for LMCache engine.")
-        torch_dev = torch.hpu
-        dev_name = "hpu"
-    else:
-        raise RuntimeError("Unsupported device platform for LMCache engine.")
-    return torch_dev, dev_name
+    if not torch.npu.is_available():
+        raise RuntimeError("An Ascend NPU is required for the LMCache worker")
+    return torch.npu, "npu"
 
 
 def calculate_local_rank_and_world_size(vllm_config: "VllmConfig") -> Tuple[int, int]:

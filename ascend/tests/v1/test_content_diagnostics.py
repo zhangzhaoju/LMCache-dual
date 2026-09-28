@@ -12,7 +12,7 @@ import pytest
 import torch
 
 # First Party
-from lmcache_ascend.v1 import content_diagnostics as diagnostics
+from lmcache.v1 import content_diagnostics as diagnostics
 
 
 @pytest.fixture(autouse=True)
@@ -98,9 +98,7 @@ def test_metadata_only_event_uses_same_diagnostic_gate(
     assert events == []
 
     diagnostics.configure_npu_content_diagnostics(True)
-    diagnostics.log_npu_content_diagnostic_event(
-        "ready", req_id="request", ready=False
-    )
+    diagnostics.log_npu_content_diagnostic_event("ready", req_id="request", ready=False)
     assert events[-1] == ("ready", {"req_id": "request", "ready": False})
 
 
@@ -163,7 +161,7 @@ def test_configure_installs_and_clears_vllm_callback_bridge(
     )
     monkeypatch.setitem(
         sys.modules,
-        "vllm_ascend.lmcache_diagnostics",
+        "vllm.distributed.kv_transfer.lmcache_diagnostics",
         fake_bridge,
     )
 
@@ -171,8 +169,7 @@ def test_configure_installs_and_clears_vllm_callback_bridge(
     assert len(installed) == 1
     callbacks = installed[0].callbacks
     assert (
-        callbacks["begin_deferred_step"]
-        is diagnostics.begin_deferred_diagnostic_step
+        callbacks["begin_deferred_step"] is diagnostics.begin_deferred_diagnostic_step
     )
     assert callbacks["flush_deferred"] is diagnostics.flush_deferred_diagnostics
     assert (
@@ -187,13 +184,9 @@ def test_configure_installs_and_clears_vllm_callback_bridge(
         callbacks["queue_group1_first_consume"]
         is diagnostics.queue_group1_first_consume
     )
+    assert callbacks["queue_cache_tail"] is diagnostics.queue_cache_tail_fingerprint
     assert (
-        callbacks["queue_cache_tail"]
-        is diagnostics.queue_cache_tail_fingerprint
-    )
-    assert (
-        callbacks["queue_selected_topk"]
-        is diagnostics.queue_selected_topk_fingerprint
+        callbacks["queue_selected_topk"] is diagnostics.queue_selected_topk_fingerprint
     )
     assert (
         callbacks["queue_staged_graph_stage"]
@@ -392,17 +385,11 @@ def test_cache_tail_fingerprint_reports_scatter_integrity_and_prefix_boundary(
         num_actual_tokens=2,
         attn_state="DecodeOnly",
     )
-    assert [event for event, _ in events] == [
-        "content_diagnostics_enabled"
-    ]
+    assert [event for event, _ in events] == ["content_diagnostics_enabled"]
 
     diagnostics.flush_deferred_diagnostics()
 
-    tail = next(
-        fields
-        for event, fields in events
-        if event == "cache_tail_fingerprint"
-    )
+    tail = next(fields for event, fields in events if event == "cache_tail_fingerprint")
     assert tail["layer_id"] == 17
     assert tail["kv_group"] == 1
     assert tail["logical_tokens"] == [4]
@@ -410,9 +397,7 @@ def test_cache_tail_fingerprint_reports_scatter_integrity_and_prefix_boundary(
     assert tail["query_length"] == 2
     assert tail["cached_prefix_tokens"] == 4
     assert tail["prefix_hit"] is True
-    assert tail["selection_reason"] == (
-        "first_query_row_at_cached_prefix_boundary"
-    )
+    assert tail["selection_reason"] == ("first_query_row_at_cached_prefix_boundary")
     assert tail["all_components_match_produced"] is False
     summary = tail["component_summaries"]["index"]
     assert summary["matches_produced"] is False
@@ -519,9 +504,7 @@ def test_staged_graph_stage_snapshot_is_deferred_and_immutable(
         graph_key="spec-2",
     )
     values.fill_(9)
-    assert [event for event, _ in events] == [
-        "content_diagnostics_enabled"
-    ]
+    assert [event for event, _ in events] == ["content_diagnostics_enabled"]
 
     diagnostics.flush_deferred_diagnostics()
 
@@ -566,9 +549,7 @@ def test_staged_graph_snapshot_compares_group0_local_cpu_source_after_join(
             torch.zeros((4, 1, 1), dtype=torch.bfloat16),
         ),
     )
-    destination_nope = torch.tensor(
-        [[[1, 2]], [[7, 8]]], dtype=torch.bfloat16
-    )
+    destination_nope = torch.tensor([[[1, 2]], [[7, 8]]], dtype=torch.bfloat16)
     destination_pe = torch.tensor([[[5]], [[11]]], dtype=torch.bfloat16)
     diagnostics.queue_staged_graph_stage_fingerprint(
         req_ids=["request"],
@@ -605,12 +586,8 @@ def test_staged_graph_snapshot_compares_group0_local_cpu_source_after_join(
     assert fields["all_components_match"] is True
     assert fields["source_details"][0]["selected_token_preview"] == [0, 2]
     source_summaries = fields["component_summaries"]
-    assert source_summaries["retrieved_nope_sample"][
-        "matches_destination"
-    ] is True
-    assert source_summaries["retrieved_pe_sample"][
-        "matches_destination"
-    ] is True
+    assert source_summaries["retrieved_nope_sample"]["matches_destination"] is True
+    assert source_summaries["retrieved_pe_sample"]["matches_destination"] is True
 
 
 def test_group0_source_probe_reports_missing_request_context(

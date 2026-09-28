@@ -56,7 +56,7 @@ from load_benchmark_utils import (  # noqa: E402
     recommended_num_blocks,
     time_npu_callable,
 )
-from lmcache_ascend.v1.npu_connector.utils import (  # noqa: E402
+from lmcache.v1.npu_connector.utils import (  # noqa: E402
     sparse_mla_dsa_batched_direct_kv_transfer_prepared,
 )
 
@@ -130,9 +130,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     if args.topk <= 0:
         parser.error("--topk must be positive")
     if not 0 <= args.valid_count <= row_width <= args.num_tokens:
-        parser.error(
-            "require 0 <= --valid-count <= MTP * --topk <= --num-tokens"
-        )
+        parser.error("require 0 <= --valid-count <= MTP * --topk <= --num-tokens")
     if args.num_layers <= 0 or args.chunk_size <= 0 or args.block_size <= 0:
         parser.error("--num-layers, --chunk-size, and --block-size must be positive")
     if args.warmup < 0 or args.iters <= 0:

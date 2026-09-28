@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Constants for LMCache Controller ZMQ Benchmark"""
 
 # SPDX-License-Identifier: Apache-2.0

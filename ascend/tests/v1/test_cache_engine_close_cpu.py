@@ -23,12 +23,12 @@ import pytest
 
 @pytest.fixture
 def engine_class():
-    path = Path(__file__).resolve().parents[2] / "lmcache_ascend/v1/cache_engine.py"
+    path = Path(__file__).resolve().parents[3] / "lmcache/v1/cache_engine.py"
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     cls = next(
         item
         for item in tree.body
-        if isinstance(item, ast.ClassDef) and item.name == "AscendLMCacheEngine"
+        if isinstance(item, ast.ClassDef) and item.name == "LMCacheEngine"
     )
     methods = {
         "__init__",
@@ -42,6 +42,8 @@ def engine_class():
         if isinstance(item, ast.FunctionDef) and item.name in methods
     ]
     assert {item.name for item in cls.body} == methods
+    cls.bases = [ast.Name(id="BaseEngineFixture", ctx=ast.Load())]
+    ast.fix_missing_locations(cls)
 
     class BaseEngineFixture:
         def __init__(self, config, metadata, *args):
@@ -60,8 +62,11 @@ def engine_class():
         def close(self):
             self.events.append("base_close")
 
+        _common_init = __init__
+        _common_close = close
+
     namespace = {
-        "LMCacheEngine": BaseEngineFixture,
+        "BaseEngineFixture": BaseEngineFixture,
         "deque": deque,
         "WeakSet": WeakSet,
         "threading": threading,
@@ -75,7 +80,7 @@ def engine_class():
         compile(module, str(path), "exec", flags=__future__.annotations.compiler_flag),
         namespace,
     )
-    return namespace["AscendLMCacheEngine"]
+    return namespace["LMCacheEngine"]
 
 
 def make_engine(engine_class, *, store_async=False, direct=False, queue_size=1):

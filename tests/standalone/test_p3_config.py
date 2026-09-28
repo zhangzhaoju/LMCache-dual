@@ -316,9 +316,8 @@ class NativeConfigContracts(unittest.TestCase):
             and node.func.id == "create_config_class"
         ]
         self.assertEqual(len(factories), 1)
-        plugin = (ROOT / "ascend/lmcache_ascend/__init__.py").read_text(
-            encoding="utf-8"
-        )
+        self.assertFalse((ROOT / "ascend/lmcache_ascend").exists())
+        plugin = (ROOT / "lmcache/__init__.py").read_text(encoding="utf-8")
         for retired in ("_patch_config", "create_config_class", "_CONFIG_DEFINITIONS"):
             self.assertNotIn(retired, plugin)
 

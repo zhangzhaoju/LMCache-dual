@@ -14,11 +14,11 @@ from lmcache.v1.memory_management import MemoryFormat, TensorMemoryAllocator
 from lmcache.v1.metadata import LMCacheMetadata
 from lmcache.v1.shared_cpu_cache import PassiveSharedViewAllocator
 from lmcache.v1.token_database import ChunkedTokenDatabase
-from lmcache_ascend.v1.cache_engine import AscendLMCacheEngine
+from lmcache.v1.cache_engine import LMCacheEngine
 
 
 @pytest.fixture
-def engine() -> AscendLMCacheEngine:
+def engine() -> LMCacheEngine:
     config = LMCacheEngineConfig.from_defaults(
         chunk_size=4,
         save_unfull_chunk=True,
@@ -34,7 +34,7 @@ def engine() -> AscendLMCacheEngine:
         kv_shape=(2, 1, 4, 1, 2),
         use_mla=True,
     )
-    result = object.__new__(AscendLMCacheEngine)
+    result = object.__new__(LMCacheEngine)
     result.config, result.metadata = config, metadata
     result.num_layers = 2
     result.token_database = ChunkedTokenDatabase(config, metadata)

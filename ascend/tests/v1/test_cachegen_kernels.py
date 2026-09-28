@@ -18,7 +18,7 @@ import torch
 import torch_npu
 
 # First Party
-import lmcache_ascend.c_ops as lmc_ops
+import lmcache.c_ops as lmc_ops
 
 
 # Generating relastic and obviously correct input/output for encode is hard in all but

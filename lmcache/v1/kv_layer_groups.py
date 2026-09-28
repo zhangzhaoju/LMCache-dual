@@ -34,9 +34,7 @@ def validate_two_group_layer_counts(
             "the serving engine"
         )
     if len(counts) == 2 and all(
-        isinstance(value, int)
-        and not isinstance(value, bool)
-        and value > 0
+        isinstance(value, int) and not isinstance(value, bool) and value > 0
         for value in counts
     ):
         return int(counts[0]), int(counts[1])
@@ -157,6 +155,14 @@ class KVLayerGroupInfo:
         if len(self.shape) == 5:
             # MHA
             return self.shape[3] * self.shape[4]
+        elif len(self.shape) == 4:
+            # NOTE(gingfung): Ascend separated format for KVCaches
+            # i.e. a tuple of kv (numblocks, blocksize, heads, headdim)
+            #      very unlikely, but potentially MLA with (1, ....)
+            if self.shape[0] == 1:
+                raise ValueError(f"Invalid shape for hidden dim size: {self.shape}")
+
+            return self.shape[2] * self.shape[3]
         elif len(self.shape) == 3:
             # MLA
             return self.shape[2]
@@ -261,34 +267,13 @@ class KVLayerGroupsManager:
             return
 
         # Group layers by (shape, dtype) in a single loop
-        groups_dict: dict[tuple[torch.Size, torch.dtype], list[tuple[str, int]]] = (
-            defaultdict(list)
-        )
+        groups_dict: dict[tuple[object, ...], list[tuple[str, int]]] = defaultdict(list)
+        group_infos: dict[tuple[object, ...], tuple[torch.Size, torch.dtype]] = {}
 
         for idx, (layer_name, kv_cache) in enumerate(kv_caches.items()):
-            # Supports:
-            # - Single-tensor format: a single tensor with shape
-            #   [2, num_blocks, block_size, num_heads, head_size].
-            # - Tuple/list KV entries such as [k_tensor, v_tensor].
-            # - DSA two-group indexer entries with one tensor:
-            #   [indexer_k].
-            if isinstance(kv_cache, (tuple, list)):
-                if len(kv_cache) < 1:
-                    raise ValueError(
-                        f"Expected at least 1 tensor for layer {layer_name}, "
-                        "got an empty KV tuple/list"
-                    )
-                # Prepend the count as a leading dimension to produce the
-                # same canonical shape as the single-tensor format
-                # (e.g., [2, num_blocks, ...] for k+v), so downstream
-                # indexing (e.g., hidden_dim_size) is unaffected.
-                shape = torch.Size([len(kv_cache)] + list(kv_cache[0].shape))
-                dtype = kv_cache[0].dtype
-            else:
-                shape = kv_cache.shape
-                dtype = kv_cache.dtype
-            key = (shape, dtype)
+            key, shape, dtype = _get_kv_cache_group_key_and_info(kv_cache)
             groups_dict[key].append((layer_name, idx))
+            group_infos[key] = (shape, dtype)
 
         # Build KVLayerGroupInfo list
         # Sort groups by the first layer index to maintain order
@@ -304,8 +289,9 @@ class KVLayerGroupsManager:
         sorted_keys = sorted(groups_dict.keys(), key=_get_first_layer_index)
 
         kv_layer_groups: list[KVLayerGroupInfo] = []
-        for shape, dtype in sorted_keys:
-            layers = groups_dict[(shape, dtype)]
+        for key in sorted_keys:
+            shape, dtype = group_infos[key]
+            layers = groups_dict[key]
             layer_names, layer_indices = zip(*layers, strict=False)
 
             group_info = KVLayerGroupInfo(
@@ -321,3 +307,48 @@ class KVLayerGroupsManager:
 
         # Print the group structure
         logger.info("KV layer groups: %s", kv_layer_groups)
+
+
+def _get_tuple_storage_shape(kv_cache: tuple[torch.Tensor, ...]) -> torch.Size:
+    """Return the flattened LMCache storage shape for tuple-based KV caches.
+
+    For MLA/DSA, LMCache stores multiple KV tensors as a single contiguous
+    hidden dimension, so we must derive the flattened hidden size from the
+    whole tuple instead of only looking at the first tensor.
+    """
+    first_shape = kv_cache[0].shape
+
+    for tensor in kv_cache[1:]:
+        if tensor.shape[:2] != first_shape[:2]:
+            raise ValueError(
+                "All KV tensors in a tuple must share [num_blocks, block_size], "
+                f"got {first_shape} and {tensor.shape}"
+            )
+
+    if len(kv_cache) == 2 and kv_cache[0].shape == kv_cache[1].shape:
+        return first_shape
+
+    total_hidden_dim = sum(tensor.shape[-2] * tensor.shape[-1] for tensor in kv_cache)
+    return torch.Size([first_shape[0], first_shape[1], total_hidden_dim])
+
+
+def _get_kv_cache_group_key_and_info(
+    kv_cache: torch.Tensor | tuple[torch.Tensor, ...],
+) -> tuple[tuple[object, ...], torch.Size, torch.dtype]:
+    """Build a stable grouping key plus the LMCache storage shape/dtype."""
+    if isinstance(kv_cache, tuple):
+        dtypes = tuple(tensor.dtype for tensor in kv_cache)
+        if len(set(dtypes)) != 1:
+            raise ValueError(
+                "Tuple-based KV caches with mixed dtypes are not supported by "
+                "LMCache-Ascend."
+            )
+
+        shapes = tuple(tensor.shape for tensor in kv_cache)
+        storage_shape = _get_tuple_storage_shape(kv_cache)
+        return (shapes, dtypes), storage_shape, dtypes[0]
+
+    if isinstance(kv_cache, torch.Tensor):
+        return ((kv_cache.shape,), (kv_cache.dtype,)), kv_cache.shape, kv_cache.dtype
+
+    raise RuntimeError(f"Unknown KVCache type: {type(kv_cache)}")

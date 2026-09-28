@@ -126,7 +126,10 @@ def promote(request, retry=True):
             and request.num_external_computed_tokens == 0
         )
         assert request.num_cached_tokens == 0
-        assert not request.bootstrap_sample_pending and request.bootstrap_final_hidden is None
+        assert (
+            not request.bootstrap_sample_pending
+            and request.bootstrap_final_hidden is None
+        )
         assert not request.dsa_compact_allocated
 
 
@@ -234,7 +237,7 @@ def test_only_expected_pretransfer_miss_avoids_invalid_blocks_and_stack(api, kin
     )
     cls = implementation(
         "lmcache_ascend/integration/vllm/vllm_v1_adapter.py",
-        "LMCacheAscendConnectorV1Impl",
+        "LMCacheConnectorV1Impl",
         {"_record_checkpoint_restore_miss"},
         base,
         CheckpointRestoreMiss=control.CheckpointRestoreMiss,
@@ -318,7 +321,7 @@ def test_all_tp_ranks_receive_the_same_typed_pretransfer_miss(api):
     )
     cls = implementation(
         "lmcache_ascend/v1/cache_engine.py",
-        "AscendLMCacheEngine",
+        "LMCacheEngine",
         {"prepare_checkpoint_restore"},
         base,
         CheckpointRestoreMiss=control.CheckpointRestoreMiss,

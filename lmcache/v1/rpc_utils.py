@@ -125,6 +125,11 @@ def get_zmq_rpc_path_lmcache(
     Returns:
         The ZMQ socket path string.
     """
+    # Preserve the effective P2 socket identity without wrapping already
+    # imported references (and without hashing twice).
+    import hashlib
+
+    engine_id = hashlib.md5(engine_id.encode()).hexdigest()[:8]
     if base_url is None:
         # Try to import vllm.envs, fallback to default if not available
         try:
@@ -163,3 +168,9 @@ def get_zmq_rpc_path_lmcache(
     )
 
     return socket_path
+
+
+def _find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]

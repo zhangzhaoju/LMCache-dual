@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Single P1 build entry: Ascend extensions and both temporary namespaces."""
+"""Native P3 build entry: one lmcache namespace with Ascend extensions."""
 
 import sys
 from pathlib import Path

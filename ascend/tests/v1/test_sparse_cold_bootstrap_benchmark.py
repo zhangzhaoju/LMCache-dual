@@ -74,9 +74,7 @@ def test_evidence_contract_has_fixed_matrix_fresh_namespaces_and_hashes() -> Non
     namespaces = [item["namespace"] for item in commands]
     # Diagnostic/final modes intentionally address disjoint cache namespaces.
     assert len(namespaces) == len(set(namespaces))
-    assert {item["prompt_hash"] for item in commands} == {
-        manifest["prompt_hash"]
-    }
+    assert {item["prompt_hash"] for item in commands} == {manifest["prompt_hash"]}
     assert {item["token_hash"] for item in commands} == {
         manifest["outputs"]["token_ids_sha256"]
     }
@@ -105,7 +103,7 @@ def test_evidence_contract_rejects_incomplete_or_wrong_topology_manifest() -> No
 def test_filtered_evidence_json_has_one_timeline_and_exclusive_mooncake() -> None:
     benchmark = _load_benchmark_module()
     lines = [
-        'noise before payload',
+        "noise before payload",
         '[LMCACHE_COLD_PERF] {"schema":1,"event":"metadata_prepare",'
         '"req_id":"r1","pid":1,"monotonic_ms":1,"elapsed_ms":2}',
         '[LMCACHE_COLD_PERF] {"schema":1,"event":"mooncake_page_lookup",'
@@ -196,9 +194,7 @@ def test_cold_bootstrap_benchmark_preserves_page_first_topology_and_warm_reuse(
 
 
 @pytest.mark.parametrize("chunk_size", [256, 512, 1024])
-def test_partial_tail_is_one_merged_mooncake_page(
-    monkeypatch, chunk_size
-) -> None:
+def test_partial_tail_is_one_merged_mooncake_page(monkeypatch, chunk_size) -> None:
     benchmark = _load_benchmark_module()
     page_keys = []
     make_page_key = benchmark.mooncake_page_key
@@ -263,9 +259,7 @@ def test_resolver_timing_hook_covers_all_production_stages() -> None:
     assert benchmark._RESOLVER_EMITTED_STAGES == stages
     for index, stage in enumerate(stages, start=1):
         benchmark._record_resolver_stage(stats, stage, index / 1000)
-        assert getattr(stats, f"resolver_{stage}_s") == pytest.approx(
-            index / 1000
-        )
+        assert getattr(stats, f"resolver_{stage}_s") == pytest.approx(index / 1000)
     benchmark._record_resolver_stage(stats, "validation", 0.008)
     assert stats.resolver_validation_s == pytest.approx(0.008)
     assert benchmark._resolver_cpu_attributed_s(stats) == pytest.approx(
@@ -300,7 +294,7 @@ def test_cold_bootstrap_token_database_config_is_schema_independent():
 def test_synthetic_connector_satisfies_layerwise_connector_contract():
     benchmark = _load_benchmark_module()
     # First Party
-    from lmcache.v1.gpu_connector.utils import assert_layerwise_gpu_connector
+    from lmcache.v1.device_connector.utils import assert_layerwise_gpu_connector
 
     connector = benchmark.SyntheticGPUConnector(
         benchmark.StageStats(),

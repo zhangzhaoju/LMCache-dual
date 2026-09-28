@@ -3,12 +3,14 @@
 from dataclasses import dataclass
 from typing import Optional
 import platform
+import os
 
 # Third Party
 import psutil
 import torch
+import torch_npu  # noqa: F401
 
-if torch.cuda.is_available():
+if torch.npu.is_available():
     try:
         # First Party
         from lmcache.c_ops import get_gpu_pci_bus_id
@@ -71,12 +73,16 @@ class NUMADetector:
             RuntimeError: If interleaving is requested and the process
                 memory-node allowance cannot be detected.
         """
-        policy = str(
-            config.get_extra_config_value(
-                "shared_cpu_cache_numa_policy",
-                getattr(config, "shared_cpu_cache_numa_policy", "first_touch"),
+        policy = (
+            str(
+                config.get_extra_config_value(
+                    "shared_cpu_cache_numa_policy",
+                    getattr(config, "shared_cpu_cache_numa_policy", "first_touch"),
+                )
             )
-        ).strip().lower()
+            .strip()
+            .lower()
+        )
         configured_nodes = config.get_extra_config_value(
             "shared_cpu_cache_numa_nodes",
             getattr(config, "shared_cpu_cache_numa_nodes", None),
@@ -116,8 +122,7 @@ class NUMADetector:
             ) from exc
         if not nodes or any(node < 0 for node in nodes):
             raise ValueError(
-                "shared_cpu_cache_numa_nodes must contain non-negative NUMA "
-                "node IDs"
+                "shared_cpu_cache_numa_nodes must contain non-negative NUMA node IDs"
             )
         if not set(nodes).issubset(allowed_nodes):
             raise ValueError(
@@ -172,14 +177,28 @@ class NUMADetector:
         """
 
         try:
-            device_index = torch.cuda.current_device()
-            pci_bus_id = get_gpu_pci_bus_id(device_index).lower()
+            device_index = torch.npu.current_device()
+            # Same logical-to-physical mapping as vLLM's NPU platform,
+            # without importing the serving framework into the cache service.
+            visible = os.environ.get("ASCEND_RT_VISIBLE_DEVICES")
+            phy_device_id = (
+                int(visible.split(",")[device_index]) if visible else device_index
+            )
+            pci_bus_id = get_gpu_pci_bus_id(phy_device_id).lower()
 
             numa_node_file = f"/sys/bus/pci/devices/{pci_bus_id}/numa_node"
             with open(numa_node_file) as f:
                 numa_node = int(f.read())
 
-            return NUMAMapping(gpu_to_numa_mapping={device_index: numa_node})
+            # Sanitizing the output as on some hardware setups the numa_node variable
+            # appeared to return with -1 value, causing failure.
+            if numa_node >= 0:
+                return NUMAMapping(gpu_to_numa_mapping={device_index: numa_node})
+            else:
+                logger.warning(
+                    "No valid NUMA mapping for current device, returning None"
+                )
+                return None
         except Exception as e:
             logger.warning(f"Failed to auto read NUMA mapping from system: {e}")
             return None

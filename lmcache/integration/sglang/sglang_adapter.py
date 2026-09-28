@@ -20,7 +20,7 @@ from lmcache.utils import (
 )
 from lmcache.v1.cache_engine import LMCacheEngine, LMCacheEngineBuilder
 from lmcache.v1.config import LMCacheEngineConfig
-from lmcache.v1.gpu_connector import CreateGPUConnector
+from lmcache.v1.npu_connector import CreateNPUConnector
 from lmcache.v1.metadata import LMCacheMetadata
 
 logger = init_logger(__name__)
@@ -86,7 +86,7 @@ def init_lmcache_engine(
         kv_shape=kv_shape,
     )
 
-    gpu_connector = CreateGPUConnector(config, metadata, EngineType.SGLANG)
+    gpu_connector = CreateNPUConnector(config, metadata, EngineType.SGLANG)
     engine = LMCacheEngineBuilder.get_or_create(
         ENGINE_NAME,
         config,

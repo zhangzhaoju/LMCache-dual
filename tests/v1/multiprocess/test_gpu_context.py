@@ -6,7 +6,7 @@ non-overlapping guarantees.
 
 These tests construct a minimal GPUCacheContext-like object that has
 just the fields the buffer methods need, avoiding the full KVCache /
-CudaIPCWrapper construction.
+NPUIPCWrapper construction.
 """
 
 # Third Party

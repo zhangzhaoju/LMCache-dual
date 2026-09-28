@@ -14,6 +14,7 @@ import threading
 # Third Party
 from sortedcontainers import SortedList
 import torch
+import torch_npu  # noqa: F401
 
 # First Party
 from lmcache.integration.vllm.utils import get_size_bytes
@@ -23,12 +24,9 @@ from lmcache.utils import _lmcache_nvtx_annotate
 from lmcache.v1.pin_monitor import PinMonitor
 from lmcache.v1.system_detection import NUMAMapping
 
-if torch.cuda.is_available():
-    # First Party
-    import lmcache.c_ops as lmc_ops
-else:
-    # First Party
-    import lmcache.non_cuda_equivalents as lmc_ops
+# The native extension owns host registration too; CPU storage on Ascend must
+# not silently select the unregistered non-CUDA fallback.
+import lmcache.c_ops as lmc_ops
 
 
 logger = init_logger(__name__)
@@ -275,8 +273,7 @@ class _TensorAllocationBatch:
             and len(self.addresses) == len(self.member_ids)
             and self.physical_size > 0
             and all(
-                address >= 0
-                and address + self.physical_size <= slab_size
+                address >= 0 and address + self.physical_size <= slab_size
                 for address in self.addresses
             )
         )
@@ -499,8 +496,8 @@ def _resolve_pinned_alloc_free(
             (lmc_ops.free_shm_pinned_ptr, size, shm_name),
         )
     elif numa_mapping:
-        if torch.cuda.is_available():
-            current_device_id = torch.cuda.current_device()
+        if torch.npu.is_available():
+            current_device_id = torch.npu.current_device()
         else:
             current_device_id = 0
         gpu_to_numa_mapping = numa_mapping.gpu_to_numa_mapping
@@ -549,8 +546,8 @@ def _free_cpu_memory(
     numa_mapping: Optional[NUMAMapping] = None,
     shm_name: Optional[str] = None,
 ) -> None:
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
+    if torch.npu.is_available():
+        torch.npu.synchronize()
 
     _, free_info = _resolve_pinned_alloc_free(
         numa_mapping,
@@ -634,11 +631,7 @@ class TensorMemoryObj(MemoryObj):
         buffer = getattr(self.parent_allocator, "buffer", None)
         start = self.meta.address
         end = start + self._raw_view_size
-        if (
-            not isinstance(buffer, torch.Tensor)
-            or start < 0
-            or end > buffer.numel()
-        ):
+        if not isinstance(buffer, torch.Tensor) or start < 0 or end > buffer.numel():
             raise RuntimeError("Address-backed tensor storage is unavailable")
         return buffer[start:end]
 
@@ -723,9 +716,7 @@ class TensorMemoryObj(MemoryObj):
             return False
         batch_id = id(batch)
         if batch_id not in validation_cache:
-            validation_cache[batch_id] = batch.matches(
-                parent, slab_size, dtype, fmt
-            )
+            validation_cache[batch_id] = batch.matches(parent, slab_size, dtype, fmt)
         index = self._allocation_batch_index
         metadata = self.meta
         logical_size = self.get_size()
@@ -799,9 +790,7 @@ class TensorMemoryObj(MemoryObj):
                 return len(self.meta.cached_positions)
             token_dim = self.meta.fmt.token_dim()
             if token_dim >= len(self.meta.shape):
-                raise ValueError(
-                    "Flat memory object requires valid_tokens metadata"
-                )
+                raise ValueError("Flat memory object requires valid_tokens metadata")
             return self.meta.shape[token_dim]
 
     def pin(self) -> bool:
@@ -892,8 +881,8 @@ class TensorMemoryObj(MemoryObj):
             return None
         assert self.meta.dtype is not None
         # TODO(Jiayi): consider caching the `get_size()`
-        return self.raw_data[: self.get_size()].view(self.meta.dtype).view(
-            self.meta.shape
+        return (
+            self.raw_data[: self.get_size()].view(self.meta.dtype).view(self.meta.shape)
         )
 
     @property
@@ -1796,9 +1785,7 @@ class TensorMemoryAllocator(MemoryAllocatorInterface):
             if token_dim >= len(shapes[0]) and len(shapes[0]) == 1:
                 raise ValueError("Flat layer-page shape requires full_tokens")
             full_tokens = int(
-                shapes[0][token_dim]
-                if token_dim < len(shapes[0])
-                else shapes[0][0]
+                shapes[0][token_dim] if token_dim < len(shapes[0]) else shapes[0][0]
             )
         full_shape = _layer_page_shape(
             shapes[0], fmt, full_tokens, full_tokens=full_tokens
@@ -1818,9 +1805,7 @@ class TensorMemoryAllocator(MemoryAllocatorInterface):
             positions_by_count: dict[int, list[int]] = {}
             for index, count in enumerate(token_counts):
                 positions_by_count.setdefault(count, []).append(index)
-            pages_by_position: list[Optional[LayerPageMemoryObj]] = [
-                None
-            ] * batch_size
+            pages_by_position: list[Optional[LayerPageMemoryObj]] = [None] * batch_size
             allocated_pages: list[LayerPageMemoryObj] = []
             for count, positions in positions_by_count.items():
                 allocated = self.batched_allocate_layer_pages(
@@ -1839,17 +1824,9 @@ class TensorMemoryAllocator(MemoryAllocatorInterface):
                 allocated_pages.extend(allocated)
                 for position, page in zip(positions, allocated, strict=True):
                     pages_by_position[position] = page
-            return [
-                page
-                for page in pages_by_position
-                if page is not None
-            ]
+            return [page for page in pages_by_position if page is not None]
         count = token_counts[0]
-        shapes = [
-            _layer_page_shape(
-                full_shape, fmt, count, full_tokens=full_tokens
-            )
-        ]
+        shapes = [_layer_page_shape(full_shape, fmt, count, full_tokens=full_tokens)]
         return self._batched_allocate(
             shapes * num_layers,
             dtypes * num_layers,
@@ -1935,11 +1912,7 @@ class TensorMemoryAllocator(MemoryAllocatorInterface):
                     group_prefix_sum=group_prefix_sum,
                     raw_view_size=unit_aligned_size,
                     **({"num_layers": page_layers} if page_layers else {}),
-                    **(
-                        {"valid_tokens": page_valid_tokens}
-                        if page_layers
-                        else {}
-                    ),
+                    **({"valid_tokens": page_valid_tokens} if page_layers else {}),
                 )
             )
 
@@ -2718,9 +2691,7 @@ class MixedMemoryAllocator(MemoryAllocatorInterface):
         Arguments and return semantics match :meth:`batched_allocate`.
         Unsupported formats and allocators retain the normal allocation path.
         """
-        allocate = getattr(
-            self.pin_allocator, "batched_allocate_address_backed", None
-        )
+        allocate = getattr(self.pin_allocator, "batched_allocate_address_backed", None)
         if fmt not in (
             MemoryFormat.KV_2LTD,
             MemoryFormat.KV_2TD,
@@ -2815,8 +2786,8 @@ class MixedMemoryAllocator(MemoryAllocatorInterface):
 
     def close(self):
         if not self._unregistered:
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
+            if torch.npu.is_available():
+                torch.npu.synchronize()
             if self.buffer.numel() == 0:
                 return
             _free_cpu_memory(
@@ -2837,7 +2808,7 @@ class GPUMemoryAllocator(MemoryAllocatorInterface):
     def __init__(
         self,
         size: int,
-        device="cuda",
+        device="npu",
         align_bytes: Optional[int] = None,
         use_paging: bool = False,
         **kwargs,
@@ -2846,7 +2817,7 @@ class GPUMemoryAllocator(MemoryAllocatorInterface):
         :param int size: The size of the GPU memory in bytes.
         :param Optional[int] align_bytes: The byte alignment for allocations.
         """
-        if not torch.cuda.is_available():
+        if not torch.npu.is_available():
             device = "cpu"
 
         self.tensor = torch.empty(size, dtype=torch.uint8, device=device)
@@ -2930,7 +2901,7 @@ class AdHocMemoryAllocator(MemoryAllocatorInterface):
         """
         :param str device: The device of the ad hoc memory allocator.
         """
-        if not torch.cuda.is_available():
+        if not torch.npu.is_available():
             self.device = "cpu"
         else:
             self.device = device
@@ -3019,8 +2990,8 @@ class CuFileMemoryAllocator(GPUMemoryAllocator):
         if device is None:
             # TODO(Serapheim): Ideally we'd get the device from the upper
             # layer - for now just use the current device.
-            if torch.cuda.is_available():
-                device = f"cuda:{torch.cuda.current_device()}"
+            if torch.npu.is_available():
+                device = f"npu:{torch.npu.current_device()}"
             else:
                 device = "cpu:0"
         super().__init__(size, device, align_bytes=4096)
@@ -3043,9 +3014,9 @@ class HipFileMemoryAllocator(GPUMemoryAllocator):
 
         self.hipFileBufDeregister = hipFileBufDeregister
         if device is None:
-            if torch.cuda.is_available():
+            if torch.npu.is_available():
                 # TODO: On ROCm, PyTorch still uses the CUDA API internally
-                device = f"cuda:{torch.cuda.current_device()}"
+                device = f"npu:{torch.npu.current_device()}"
             else:
                 device = "cpu:0"
 
@@ -3076,7 +3047,7 @@ class PagedCpuGpuMemoryAllocator(MemoryAllocatorInterface):
         shapes: list[torch.Size],
         dtypes: list[torch.dtype],
         fmt: MemoryFormat = MemoryFormat.KV_2LTD,
-        device: str = "cuda",
+        device: str = "npu",
     ):
         self.gpu_buffer = torch.empty(
             size,

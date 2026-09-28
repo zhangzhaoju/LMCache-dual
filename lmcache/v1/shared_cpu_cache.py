@@ -141,8 +141,7 @@ class SharedCPURequestLease:
                     try:
                         if not self._is_valid(memory_obj):
                             raise RuntimeError(
-                                "Cannot retain an invalid shared CPU "
-                                "MemoryObj"
+                                "Cannot retain an invalid shared CPU MemoryObj"
                             )
                         if self.is_rank0 and memory_obj.pin() is False:
                             raise RuntimeError("MemoryObj.pin() returned False")
@@ -197,9 +196,7 @@ class SharedCPURequestLease:
                     "Shared CPU request lease is not append-aligned: "
                     f"kv_group={kv_group}, append_at={append_at}"
                 )
-            updates.append(
-                (current, [list(layer[append_at:]) for layer in layers])
-            )
+            updates.append((current, [list(layer[append_at:]) for layer in layers]))
 
         for current, suffix in updates:
             for layer, layer_suffix in zip(current, suffix, strict=True):
@@ -346,8 +343,7 @@ def _shared_key_matches_expected(
         ):
             return False
     if hasattr(expected_key, "layer_id") and (
-        getattr(handle_key, "layer_id", None)
-        != getattr(expected_key, "layer_id", None)
+        getattr(handle_key, "layer_id", None) != getattr(expected_key, "layer_id", None)
     ):
         return False
     return True
@@ -358,18 +354,12 @@ def _load_lmc_ops(*, purpose: str):
         import lmcache.c_ops as lmc_ops
 
         return lmc_ops
-    except ImportError:
-        try:
-            import lmcache.non_cuda_equivalents as lmc_ops
-
-            return lmc_ops
-        except ImportError as fallback_exc:
-            raise SharedCPUCacheError(
-                f"Shared CPU cache {purpose} requires lmcache.c_ops or "
-                "lmcache.non_cuda_equivalents. On Ascend, import/build "
-                "lmcache_ascend so lmcache.c_ops is patched to "
-                "lmcache_ascend.c_ops."
-            ) from fallback_exc
+    except ImportError as exc:
+        raise SharedCPUCacheError(
+            f"Shared CPU cache {purpose} requires the native lmcache.c_ops "
+            "extension from the paired P3 build; no plugin patch or "
+            "unregistered host-memory fallback is supported."
+        ) from exc
 
 
 def _require_fields(data: dict[str, Any], fields: set[str], owner: str) -> None:
@@ -505,9 +495,7 @@ class SharedChunkHandle:
             "logical_size": self.logical_size,
             "shape": list(self.shape),
             "dtype": _dtype_to_str(self.dtype),
-            "shapes": [list(shape) for shape in self.shapes]
-            if self.shapes
-            else None,
+            "shapes": [list(shape) for shape in self.shapes] if self.shapes else None,
             "dtypes": [_dtype_to_str(dtype) for dtype in self.dtypes]
             if self.dtypes
             else None,
@@ -522,8 +510,7 @@ class SharedChunkHandle:
     def from_dict(cls, data: dict[str, Any]) -> "SharedChunkHandle":
         if not isinstance(data, dict):
             raise SharedCPUCacheValidationError(
-                "SharedChunkHandle expected dict payload, "
-                f"got {type(data)!r}"
+                f"SharedChunkHandle expected dict payload, got {type(data)!r}"
             )
         _reject_private_fields(
             data,
@@ -621,8 +608,7 @@ class SharedHandleEnvelope:
     def from_dict(cls, data: dict[str, Any]) -> "SharedHandleEnvelope":
         if not isinstance(data, dict):
             raise SharedCPUCacheValidationError(
-                "SharedHandleEnvelope expected dict payload, "
-                f"got {type(data)!r}"
+                f"SharedHandleEnvelope expected dict payload, got {type(data)!r}"
             )
         _reject_private_fields(
             data,
@@ -647,8 +633,7 @@ class SharedHandleEnvelope:
         )
         if data["status"] not in ("ok", "miss", "skipped", "error"):
             raise SharedCPUCacheValidationError(
-                "SharedHandleEnvelope has unsupported status "
-                f"{data['status']!r}"
+                f"SharedHandleEnvelope has unsupported status {data['status']!r}"
             )
         if not isinstance(data["handles"], list):
             raise SharedCPUCacheValidationError(
@@ -663,10 +648,7 @@ class SharedHandleEnvelope:
             kv_group=int(data["kv_group"]),
             status=data["status"],
             generation=int(data["generation"]),
-            handles=[
-                SharedChunkHandle.from_dict(handle)
-                for handle in data["handles"]
-            ],
+            handles=[SharedChunkHandle.from_dict(handle) for handle in data["handles"]],
             message=data["message"],
             error_details=data["error_details"],
             batch=SharedHandleBatch.from_dict(data["batch"])
@@ -777,43 +759,30 @@ def validate_shared_handle(
     if handle.phase != expected_phase:
         failures.append(f"phase={handle.phase!r}, expected={expected_phase!r}")
     if handle.layer_id != expected_layer_id:
-        failures.append(
-            f"layer_id={handle.layer_id}, expected={expected_layer_id}"
-        )
+        failures.append(f"layer_id={handle.layer_id}, expected={expected_layer_id}")
     if handle.kv_group != expected_kv_group:
-        failures.append(
-            f"kv_group={handle.kv_group}, expected={expected_kv_group}"
-        )
+        failures.append(f"kv_group={handle.kv_group}, expected={expected_kv_group}")
     if handle.shm_name != expected_shm_name:
-        failures.append(
-            f"shm_name={handle.shm_name!r}, expected={expected_shm_name!r}"
-        )
+        failures.append(f"shm_name={handle.shm_name!r}, expected={expected_shm_name!r}")
     if handle.generation != expected_generation:
         failures.append(
             f"generation={handle.generation}, expected={expected_generation}"
         )
-    if (
-        expected_producer_rank is not None
-        and handle.producer_rank != int(expected_producer_rank)
+    if expected_producer_rank is not None and handle.producer_rank != int(
+        expected_producer_rank
     ):
         failures.append(
             f"producer_rank={handle.producer_rank}, "
             f"expected={int(expected_producer_rank)}"
         )
-    if (
-        expected_chunk_index is not None
-        and handle.chunk_index != expected_chunk_index
-    ):
+    if expected_chunk_index is not None and handle.chunk_index != expected_chunk_index:
         failures.append(
             f"chunk_index={handle.chunk_index}, expected={expected_chunk_index}"
         )
-    if (
-        expected_key is not None
-        and not _shared_key_matches_expected(
-            handle.key,
-            expected_key,
-            expected_producer_rank,
-        )
+    if expected_key is not None and not _shared_key_matches_expected(
+        handle.key,
+        expected_key,
+        expected_producer_rank,
     ):
         failures.append(f"key={handle.key!r}, expected={expected_key!r}")
     if expected_shape is not None and handle.shape != torch.Size(expected_shape):
@@ -857,8 +826,7 @@ def validate_shared_handle(
                 expected_for_log = None
             if not positions_match:
                 failures.append(
-                    f"cached_positions={cached_positions}, "
-                    f"expected={expected_for_log}"
+                    f"cached_positions={cached_positions}, expected={expected_for_log}"
                 )
         except Exception as exc:
             failures.append(f"invalid cached_positions metadata: {exc}")
@@ -891,13 +859,10 @@ def validate_shared_handle_batch(
 ) -> None:
     failures = []
     if batch.shm_name != expected_shm_name:
-        failures.append(
-            f"shm_name={batch.shm_name!r}, expected={expected_shm_name!r}"
-        )
+        failures.append(f"shm_name={batch.shm_name!r}, expected={expected_shm_name!r}")
     if batch.producer_rank != expected_producer_rank:
         failures.append(
-            f"producer_rank={batch.producer_rank}, "
-            f"expected={expected_producer_rank}"
+            f"producer_rank={batch.producer_rank}, expected={expected_producer_rank}"
         )
     if batch.num_layers != expected_num_layers:
         failures.append(
@@ -920,16 +885,12 @@ def validate_shared_handle_batch(
     tail_chunks = max(expected_num_chunks - page_count, 0)
     expected_offsets = expected_num_layers * tail_chunks
     if len(batch.offsets) != expected_offsets:
-        failures.append(
-            f"offsets={len(batch.offsets)}, expected={expected_offsets}"
-        )
+        failures.append(f"offsets={len(batch.offsets)}, expected={expected_offsets}")
     if any(offset < 0 for offset in batch.offsets) or (
         sizes_valid
         and tail_chunks > 0
         and any(
-            offset
-            + batch.physical_sizes[page_count + index % tail_chunks]
-            > slab_size
+            offset + batch.physical_sizes[page_count + index % tail_chunks] > slab_size
             for index, offset in enumerate(batch.offsets)
         )
     ):
@@ -1004,9 +965,7 @@ class PassiveSharedViewAllocator(MemoryAllocatorInterface):
             expected_producer_rank=expected_producer_rank,
             slab_size=self.slab_size,
         )
-        raw_data = self.slab_tensor[
-            handle.offset : handle.offset + handle.logical_size
-        ]
+        raw_data = self.slab_tensor[handle.offset : handle.offset + handle.logical_size]
         cached_positions = (
             torch.tensor(handle.cached_positions, dtype=torch.int64)
             if handle.cached_positions is not None
@@ -1140,9 +1099,7 @@ class PassiveSharedViewAllocator(MemoryAllocatorInterface):
         fmt: MemoryFormat = MemoryFormat.UNDEFINED,
         allocator_type: Optional[str] = None,
     ) -> Optional[list[MemoryObj]]:
-        raise SharedCPUCacheError(
-            "PassiveSharedViewAllocator cannot allocate batches"
-        )
+        raise SharedCPUCacheError("PassiveSharedViewAllocator cannot allocate batches")
 
     def free(
         self,

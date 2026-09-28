@@ -7,7 +7,7 @@ import warnings
 import pytest
 
 # First Party
-import lmcache_ascend
+import lmcache  # native owner, no import patch
 
 
 def test_dependency_compatibility():
@@ -29,7 +29,7 @@ def test_dependency_compatibility():
         pytest.fail("❌ 'lmcache' is not installed in the current environment.")
 
     # 2. Get the target version from your package
-    target_tag = lmcache_ascend.LMCACHE_UPSTREAM_TAG
+    target_tag = lmcache.LMCACHE_UPSTREAM_TAG
 
     # 3. Normalize (remove 'v' prefix for comparison)
     clean_target = target_tag.lstrip("v")

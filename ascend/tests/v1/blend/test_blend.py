@@ -12,7 +12,7 @@ import pytest
 import torch
 
 # First Party
-from lmcache_ascend.v1.blend.blender import LMCBlender
+from lmcache.v1.compute.npu_blend.blender import LMCBlender
 
 
 class TestLMCBlendMetadata:
@@ -93,7 +93,7 @@ class TestLMCBlender:
         return LMCacheEngineConfig.from_legacy()
 
     @pytest.fixture
-    @patch("lmcache_ascend.v1.blend.blender.infer_model_from_vllm")
+    @patch("lmcache.v1.compute.npu_blend.blender.infer_model_from_vllm")
     def blender(
         self,
         mock_infer_model,
@@ -249,7 +249,7 @@ class TestLMCBlender:
 
 
 class TestLMCBlenderBuilder:
-    @patch("lmcache_ascend.v1.blend.blender.infer_model_from_vllm")
+    @patch("lmcache.v1.compute.npu_blend.blender.infer_model_from_vllm")
     def test_builder_singleton_pattern(self, mock_infer_model):
         """Test that LMCBlenderBuilder maintains singleton instances."""
         LMCBlenderBuilder._blenders.clear()
@@ -261,7 +261,7 @@ class TestLMCBlenderBuilder:
         mock_infer_model.return_value = mock_layerwise_model
 
         with patch(
-            "lmcache_ascend.v1.blend.utils.VLLMModelTracker.get_model"
+            "lmcache.v1.compute.npu_blend.utils.VLLMModelTracker.get_model"
         ) as mock_get_model:
             mock_model = Mock()
             mock_model.model.layers = [Mock(), Mock()]

@@ -56,12 +56,12 @@ def npu_available() -> bool:
 
 def _patch_loaded_lmc_ops_bindings() -> None:
     """Re-bind lmc_ops on modules imported before Ascend c_ops patch."""
-    import lmcache_ascend.c_ops as ascend_c_ops
+    import lmcache.c_ops as ascend_c_ops
 
     for mod_name in (
         "lmcache.v1.memory_management",
         "lmcache.v1.lazy_memory_allocator",
-        "lmcache.v1.gpu_connector.utils",
+        "lmcache.v1.device_connector.utils",
     ):
         mod = sys.modules.get(mod_name)
         if mod is not None and hasattr(mod, "lmc_ops"):
@@ -88,6 +88,7 @@ def _init_spawn_env() -> None:
     prepare_environment()
     if npu_available():
         import lmcache_ascend  # noqa: F401  # patches Ascend engine + connectors
+
         _patch_loaded_lmc_ops_bindings()
 
 
@@ -166,11 +167,11 @@ def _create_worker_adapter(
     adapter: LMCacheConnectorV1Impl
     try:
         # First Party
-        from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
-            LMCacheAscendConnectorV1Impl,
+        from lmcache.integration.vllm.vllm_v1_adapter import (
+            LMCacheConnectorV1Impl,
         )
 
-        adapter = object.__new__(LMCacheAscendConnectorV1Impl)
+        adapter = object.__new__(LMCacheConnectorV1Impl)
         adapter._finished_req_ids_waiting_for_save = set()
         adapter._late_finished_sending = set()
         adapter._wait_for_save_done = True
@@ -209,14 +210,12 @@ def _run_ascend_wait_for_save(
     adapter: LMCacheConnectorV1Impl, requests: list[ReqMeta]
 ) -> None:
     """Ascend NPU wait_for_save (store + pin defer/unpin)."""
-    from lmcache_ascend.integration.vllm.vllm_v1_adapter import (
-        LMCacheAscendConnectorV1Impl,
+    from lmcache.integration.vllm.vllm_v1_adapter import (
+        LMCacheConnectorV1Impl,
     )
 
-    if not isinstance(adapter, LMCacheAscendConnectorV1Impl):
-        raise RuntimeError(
-            "NPU wait_for_save requires LMCacheAscendConnectorV1Impl"
-        )
+    if not isinstance(adapter, LMCacheConnectorV1Impl):
+        raise RuntimeError("NPU wait_for_save requires LMCacheConnectorV1Impl")
     metadata_obj = LMCacheConnectorMetadata(
         requests=_prepare_requests_for_npu_wait_for_save(requests)
     )

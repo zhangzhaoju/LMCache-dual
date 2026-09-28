@@ -9,7 +9,7 @@ import pytest
 import torch
 
 # First Party
-import lmcache_ascend.c_ops as lmc_ops
+import lmcache.c_ops as lmc_ops
 
 # Local
 from .utils import (
@@ -1502,7 +1502,9 @@ def test_sparse_single_layer_kv_transfer_mla_format(
 
     selected_indices = random.sample(range(num_lmc_tokens), num_sparse)
     sparse_dst_slots = random.sample(range(page_buffer_size), num_sparse)
-    selected_token_idx = torch.tensor(selected_indices, dtype=torch.int32, device=device)
+    selected_token_idx = torch.tensor(
+        selected_indices, dtype=torch.int32, device=device
+    )
     slot_mapping_packed = torch.tensor(sparse_dst_slots, device=device)
 
     lmc_ops.sparse_single_layer_kv_transfer(

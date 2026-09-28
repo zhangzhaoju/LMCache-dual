@@ -21,6 +21,7 @@ import threading
 
 # Third Party
 import torch
+import torch_npu  # noqa: F401
 
 # First Party
 from lmcache.logging import init_logger
@@ -40,7 +41,7 @@ from lmcache.v1.memory_management import (
 )
 from lmcache.v1.metadata import LMCacheMetadata
 from lmcache.v1.mooncake_layout import mooncake_valid_tokens
-from lmcache.v1.storage_backend import CreateStorageBackends, is_cuda_worker
+from lmcache.v1.storage_backend import CreateStorageBackends, is_npu_worker
 from lmcache.v1.storage_backend.abstract_backend import (
     AllocatorBackendInterface,
     StorageBackendInterface,
@@ -68,7 +69,7 @@ def allocate_and_copy_objects(
     allocator_backend: AllocatorBackendInterface,
     keys: Sequence[CacheEngineKey],
     src_memory_objs: list[MemoryObj],
-    stream: torch.cuda.Stream,
+    stream: torch.npu.Stream,
 ) -> tuple[Sequence[CacheEngineKey], list[MemoryObj]]:
     """
     Allocate the memory objects and copy the data from src_memory_objs to
@@ -111,7 +112,7 @@ def allocate_and_copy_objects(
             memory_obj.ref_count_down()
             break
 
-        with torch.cuda.stream(stream):
+        with torch.npu.stream(stream):
             memory_obj.tensor.copy_(src_memory_obj.tensor, non_blocking=True)
         allocated_objects.append(memory_obj)
 
@@ -271,8 +272,8 @@ class StorageManager:
         self.async_serializer: Optional[AsyncSerializer] = None
 
         # The cuda stream for internal copies during put
-        if is_cuda_worker(metadata):
-            self.internal_copy_stream = torch.cuda.Stream()
+        if is_npu_worker(metadata):
+            self.internal_copy_stream = torch.npu.Stream()
         else:
             self.internal_copy_stream = None
 
@@ -466,16 +467,12 @@ class StorageManager:
             for backend in selected
         )
 
-    def supports_batched_put_layer_pages(
-        self, location: Optional[str] = None
-    ) -> bool:
+    def supports_batched_put_layer_pages(self, location: Optional[str] = None) -> bool:
         """Whether selected backends accept one physical page for all layers."""
         return self._supports_layer_page_backends(
             [
                 backend
-                for _, backend in self.get_active_storage_backends(
-                    location=location
-                )
+                for _, backend in self.get_active_storage_backends(location=location)
             ]
         )
 
@@ -496,9 +493,7 @@ class StorageManager:
         if not pages:
             return []
         selected = list(self.get_active_storage_backends(location=location))
-        if not self._supports_layer_page_backends(
-            [backend for _, backend in selected]
-        ):
+        if not self._supports_layer_page_backends([backend for _, backend in selected]):
             raise RuntimeError("Selected storage backends do not support layer pages")
 
         layer_count = pages[0].num_layers
@@ -520,11 +515,7 @@ class StorageManager:
             and bool(getattr(backend, "use_hot", False))
         )
         remote = next(
-            (
-                backend
-                for _, backend in selected
-                if isinstance(backend, RemoteBackend)
-            ),
+            (backend for _, backend in selected if isinstance(backend, RemoteBackend)),
             None,
         )
         required_futures: list[Future] = []
@@ -1771,7 +1762,7 @@ class StorageManager:
                 self.config,
                 self.metadata,
                 self.loop,
-                dst_device=("cuda" if is_cuda_worker(self.metadata) else "cpu"),
+                dst_device=("npu" if is_npu_worker(self.metadata) else "cpu"),
                 lmcache_worker=self.lmcache_worker,
                 skip_backends=existing_names,
                 existing_backends=self.storage_backends,
@@ -1835,7 +1826,7 @@ class StorageManager:
                 self.config,
                 self.metadata,
                 self.loop,
-                dst_device=("cuda" if is_cuda_worker(self.metadata) else "cpu"),
+                dst_device=("npu" if is_npu_worker(self.metadata) else "cpu"),
                 lmcache_worker=self.lmcache_worker,
                 skip_backends=existing_names,
                 existing_backends=self.storage_backends,

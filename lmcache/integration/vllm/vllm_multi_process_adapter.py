@@ -8,6 +8,7 @@ import threading
 
 # Third Party
 import torch
+import torch_npu  # noqa: F401
 import zmq
 
 # First Party
@@ -15,7 +16,7 @@ from lmcache.integration.request_telemetry.factory import RequestTelemetryFactor
 from lmcache.utils import _lmcache_nvtx_annotate, init_logger
 from lmcache.v1.multiprocess.custom_types import (
     BlockAllocationRecord,
-    CudaIPCWrapper,
+    NPUIPCWrapper,
     IPCCacheEngineKey,
     KVCache,
 )
@@ -34,7 +35,7 @@ DEFAULT_HEARTBEAT_INTERVAL: float = 10.0
 
 def wrap_kv_caches(kv_caches: dict[str, torch.Tensor]) -> KVCache:
     logger.info("KV caches keys are %s", list(kv_caches.keys()))
-    return [CudaIPCWrapper(tensor) for tensor in kv_caches.values()]
+    return [NPUIPCWrapper(tensor) for tensor in kv_caches.values()]
 
 
 def send_lmcache_request(
@@ -589,7 +590,7 @@ class LMCacheMPWorkerAdapter:
         """
         # First Party
         from lmcache.integration.vllm.utils import vllm_layout_hints
-        from lmcache.v1.gpu_connector.utils import (
+        from lmcache.v1.device_connector.utils import (
             ensure_contiguous_kv_caches,
         )
 
@@ -643,7 +644,7 @@ class LMCacheMPWorkerAdapter:
 
     @_lmcache_nvtx_annotate
     def submit_store_request(
-        self, request_id: str, op: LoadStoreOp, event: torch.cuda.Event
+        self, request_id: str, op: LoadStoreOp, event: torch.npu.Event
     ):
         """
         Submit a KV cache store request to LMCache
@@ -668,7 +669,7 @@ class LMCacheMPWorkerAdapter:
 
     @_lmcache_nvtx_annotate
     def submit_retrieve_request(
-        self, request_id: str, op: LoadStoreOp, event: torch.cuda.Event
+        self, request_id: str, op: LoadStoreOp, event: torch.npu.Event
     ):
         """
         Submit a KV cache retrieve request to LMCache
@@ -703,7 +704,7 @@ class LMCacheMPWorkerAdapter:
         self,
         request_ids: list[str],
         ops: list[LoadStoreOp],
-        event: torch.cuda.Event,
+        event: torch.npu.Event,
     ):
         """
         Submit a batched store request to LMCache
@@ -723,7 +724,7 @@ class LMCacheMPWorkerAdapter:
         self,
         request_ids: list[str],
         ops: list[LoadStoreOp],
-        event: torch.cuda.Event,
+        event: torch.npu.Event,
     ):
         """
         Submit a batched retrieve request to LMCache
