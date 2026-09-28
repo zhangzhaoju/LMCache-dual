@@ -2,10 +2,18 @@
 
 Guidelines for AI coding agents (Copilot, Cursor, Claude Code, etc.) working in this repository.
 
-## Current fork: paired P2 development
+## Current fork: P3 native Ascend integration
 
-The user authorized preserving P1 and starting vLLM P2 on 2026-09-27. Work on
-`p2`, retaining `p1` and `main` at the saved P1 input. This overrides the upstream
+On 2026-09-28 the user authorized starting P3 from the complete P2 code and
+validating P2/P3 together in the intranet. Work on `p3`; retain `p2` at
+`cfe8a1754db743d41c8bb63f8d02ad7c3051948c`, and keep `p1`/`main` unchanged.
+P3-01 moves all Ascend config fields and pre-validation normalization into the
+canonical config, without rebuilding its class on plugin import. The remaining
+engine, connector, extension, transport and import-patch migration is pending.
+P4 pruning is not part of this batch. Do not claim P3 runtime acceptance.
+
+The user authorized preserving P1 and starting vLLM P2 on 2026-09-27. Retain
+`p1` and `main` at the saved P1 input. This overrides the upstream
 `dev` branch and CUDA setup instructions below. LMCache runtime native integration
 belongs to P3; P2 updates paired development tooling and imports of vLLM's
 shared diagnostic, event-handoff and Mooncake contracts at their native owners.

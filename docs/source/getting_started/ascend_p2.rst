@@ -1,6 +1,9 @@
 P2 paired vLLM integration
 ==========================
 
+For the P3 branch, see :doc:`ascend_p3`. This page describes the retained P2
+delivery, not the P3 package pair.
+
 Use the delivered ``p2`` commit with ``vllm==0.18.0+ascend.p2``. This LMCache
 package remains ``0.4.3+ascend.p1`` because its native integration is P3, but an
 older same-version LMCache wheel is not interchangeable: the vLLM diagnostic
