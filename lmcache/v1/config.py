@@ -159,6 +159,98 @@ _CONFIG_DEFINITIONS: dict[str, dict[str, Any]] = {
         "env_converter": _to_bool,
     },
     "p2p_host": {"type": Optional[str], "default": None, "env_converter": str},
+    # Ascend transport settings are part of the one canonical config class.
+    "p2p_use_npu": {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Use NPU memory for P2P transfers.",
+    },
+    "p2p_npu_buffer_size": {
+        "type": int,
+        "default": 1 * 1024 * 1024 * 1024,
+        "env_converter": int,
+        "description": "P2P NPU buffer size in bytes when p2p_use_npu is enabled.",
+    },
+    "p2p_pull_mode": {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Use pull instead of push for NPU P2P transfers.",
+    },
+    "p2p_delay_pull": {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Defer NPU P2P reads until needed in pull mode.",
+    },
+    "p2p_pull_pending_ttl": {
+        "type": float,
+        "default": 360.0,
+        "env_converter": float,
+        "description": "Sender pull-pending pin timeout in seconds.",
+    },
+    "pd_pull_mode": {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Read sender KV on demand using pipelined PD pull mode.",
+    },
+    "pd_delay_pull": {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Defer receiver reads in NPU PD pull mode.",
+    },
+    "pd_pull_done_port": {
+        "type": list,
+        "default": None,
+        "env_converter": _to_int_list,
+        "description": "Sender Done-signal ports, one per TP rank; unset uses "
+        "peer_alloc_port + 100.",
+    },
+    "pd_use_cpu_offload": {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Offload sender KV to CPU before PD pull transfers.",
+    },
+    "pd_cpu_buffer_size": {
+        "type": int,
+        "default": None,
+        "env_converter": int,
+        "description": "Sender CPU offload buffer size in bytes for PD pull.",
+    },
+    "pd_alloc_fail_backoff_ttl": {
+        "type": float,
+        "default": 2.0,
+        "env_converter": float,
+        "description": "Allocation-failure backoff timeout in seconds.",
+    },
+    "pd_pull_pending_ttl": {
+        "type": float,
+        "default": 360.0,
+        "env_converter": float,
+        "description": "Sender PD pull-pending pin timeout in seconds.",
+    },
+    "pd_pull_backpressure_reserve_pct": {
+        "type": float,
+        "default": 2.0,
+        "env_converter": float,
+        "description": "Percentage of sender buffer reserved as free headroom.",
+    },
+    "store_async": {
+        "type": bool,
+        "default": False,
+        "env_converter": _to_bool,
+        "description": "Store KV cache asynchronously.",
+    },
+    "store_async_max_queue_size": {
+        "type": int,
+        "default": 0,
+        "env_converter": int,
+        "description": "Pending async store queue bound; zero is unbounded.",
+    },
     "p2p_init_ports": {
         "type": Optional[list[int]],
         "default": None,
@@ -523,41 +615,59 @@ _CONFIG_DEFINITIONS: dict[str, dict[str, Any]] = {
         "type": bool,
         "default": False,
         "env_converter": _to_bool,
+        "description": "Enable decode-node-local shared CPU cache handle "
+        "publication for rank0-only LMCache storage.",
     },
     "shared_cpu_cache_strict": {
         "type": bool,
         "default": True,
         "env_converter": _to_bool,
+        "description": "Fail fast on invalid shared CPU cache config, missing "
+        "chunks, or unsafe handle/pointer validation.",
     },
     "shared_cpu_cache_name": {
         "type": Optional[str],
         "default": None,
         "env_converter": str,
+        "description": "Optional debug override for the POSIX shm name. "
+        "Unset means rank0 derives a unique engine-local name.",
     },
     "shared_cpu_cache_size_gb": {
         "type": Optional[float],
         "default": None,
         "env_converter": float,
+        "description": "Optional shared CPU slab size override in GB. "
+        "Unset means use effective max_local_cpu_size.",
     },
     "shared_cpu_cache_numa_policy": {
         "type": str,
         "default": "first_touch",
         "env_converter": str,
+        "description": "NUMA placement for the shared CPU slab: "
+        "'first_touch' preserves the existing behavior; 'interleave' "
+        "distributes pages across allowed NUMA nodes.",
     },
     "shared_cpu_cache_numa_nodes": {
         "type": str | int | list[int] | None,
         "default": None,
         "env_converter": lambda value: value,
+        "description": "Optional NUMA node list for shared CPU slab "
+        "interleaving. Unset means all nodes allowed to the process.",
     },
     "shared_cpu_materialize_index_on_decode_cold": {
         "type": bool,
         "default": True,
         "env_converter": _to_bool,
+        "description": "Materialize DSA index during sparse decode cold "
+        "bootstrap when dsa_two_groups=true.",
     },
     "shared_cpu_cache_passive_writable": {
         "type": Optional[bool],
         "default": None,
         "env_converter": _to_bool,
+        "description": "Optional passive-rank shm mmap mode override. "
+        "Unset means try read-only first and retry read-write if host "
+        "registration requires it.",
     },
     "blocking_timeout_secs": {"type": int, "default": 10, "env_converter": int},
     "external_lookup_client": {
@@ -799,8 +909,54 @@ _CONFIG_DEFINITIONS: dict[str, dict[str, Any]] = {
 
 
 # Specialized methods that are unique to LMCacheEngineConfig
-def _validate_config(self):
+def _normalize_remote_fill_config(config: Any) -> None:
+    """Select the existing Ascend RemoteFill contract before all validation.
+
+    Args:
+        config: Mutable engine configuration to normalize in place.
+
+    Raises:
+        ValueError: Direct-HBM Group-1 loading requests chunk metadata.
+
+    Returns:
+        None. Unrelated extra settings and disabled-feature behavior are kept.
+    """
+    if not config.enable_remote_lmcache_store:
+        return
+    config.use_layerwise = True
+    config.enable_sparse_attention = True
+    config.dsa_two_groups = True
+    config.save_unfull_chunk = True
+    extra_config = dict(config.extra_config or {})
+    if config.dsa_group1_load_mode == "persistent_direct_hbm" and bool(
+        extra_config.get("save_chunk_meta", False)
+    ):
+        raise ValueError(
+            "dsa_group1_load_mode=persistent_direct_hbm requires "
+            "extra_config.save_chunk_meta=false"
+        )
+    extra_config.update(
+        {
+            "save_only_first_rank": True,
+            "mooncake_page_first_multi_buffer": True,
+            "mooncake_layer_merged_page_objects": True,
+            "save_chunk_meta": False,
+        }
+    )
+    if config.pd_role == "receiver":
+        config.enable_shared_cpu_cache = True
+        config.shared_cpu_cache_strict = True
+    else:
+        config.store_async = True
+        config.store_async_max_queue_size = 2
+        extra_config["use_ascend_direct"] = True
+    config.extra_config = extra_config
+
+
+def _validate_config(self: Any) -> Any:
     """Validate configuration"""
+
+    _normalize_remote_fill_config(self)
 
     # needed for the old async serializer implementation
     # # auto-adjust save_unfull_chunk for async loading to prevent CPU fragmentation
@@ -916,24 +1072,8 @@ def _validate_config(self):
         )
     remote_fill_active = bool(self.enable_remote_lmcache_store)
     if remote_fill_active:
-        # These are invariants of the only implemented RemoteFill protocol,
-        # not deployment choices: layerwise DSA two-group pages, immutable
-        # final-only publication, non-evicting reservations, and prefiller-
-        # local persistence.  Enabling the feature selects that contract.
-        self.use_layerwise = True
-        self.dsa_two_groups = True
-        self.enable_sparse_attention = True
-        self.save_unfull_chunk = True
-        extra_config = dict(extra_config)
-        extra_config.update(
-            {
-                "save_only_first_rank": True,
-                "mooncake_page_first_multi_buffer": True,
-                "mooncake_layer_merged_page_objects": True,
-                "save_chunk_meta": False,
-            }
-        )
-        self.extra_config = extra_config
+        # Fixed flags and role-specific settings were normalized before the
+        # shared-CPU/DSA validators, not by a plugin import or a second class.
         required_remote_fill = {
             "remote_url=mooncakestore://...": str(self.remote_url).startswith(
                 "mooncakestore://"

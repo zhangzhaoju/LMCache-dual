@@ -73,6 +73,7 @@ Documentation
    getting_started/installation
    getting_started/ascend_p1
    getting_started/ascend_p2
+   getting_started/ascend_p3
    getting_started/quickstart
    getting_started/quickstart/index
    getting_started/benchmarking

@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""RemoteFill must not expose fixed protocol invariants as YAML knobs."""
+"""RemoteFill's native config must work without importing the Ascend plugin."""
 
 # Third Party
 import pytest
 
 # First Party
-import lmcache_ascend  # noqa: F401
 from lmcache.v1.config import LMCacheEngineConfig
 
 
