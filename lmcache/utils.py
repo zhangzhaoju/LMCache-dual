@@ -510,9 +510,7 @@ class CacheEngineKey:
             "kv_group": self.kv_group,
         }
         if self.tags is not None and len(self.tags) != 0:
-            msg["request_configs"] = [
-                f"lmcache.tag.{k}%{v}" for k, v in self.tags
-            ]
+            msg["request_configs"] = [f"lmcache.tag.{k}%{v}" for k, v in self.tags]
         return msg
 
     @staticmethod
@@ -682,7 +680,6 @@ class CacheStoreEvent:
 
 class EngineType(Enum):
     VLLM = "vllm"
-    SGLANG = "sglang"
     MOCK = "mock"
 
 

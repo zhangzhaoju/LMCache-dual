@@ -1,10 +1,7 @@
-buildkite-test-collector
-pytest>=7.0,<9.1  # avoid some plugins breaking in 8.x
+# Focused P4 host and native regression tooling.
+pytest>=9,<10
 pytest-asyncio
-pytest-benchmark
-pytest-benchmark[histogram]
-pytest-cov
-pytest-html>=3.2,<5.0  # 4.x requires external assets; 3.2 is stable
-jinja2<3.2
-python-multipart
-openai
+numpy==1.26.4
+msgspec
+pyzmq
+pydantic>=2.12.0

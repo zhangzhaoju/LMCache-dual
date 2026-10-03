@@ -543,11 +543,9 @@ _CONFIG_DEFINITIONS: dict[str, dict[str, Any]] = {
     "extra_config": {
         "type": Optional[dict],
         "default": None,
-        "env_converter": lambda x: x
-        if isinstance(x, dict)
-        else json.loads(x)
-        if x
-        else None,
+        "env_converter": lambda x: (
+            x if isinstance(x, dict) else json.loads(x) if x else None
+        ),
     },
     "save_unfull_chunk": {
         "type": bool,
@@ -954,6 +952,12 @@ def _normalize_remote_fill_config(config: Any) -> None:
 
 
 def _validate_config(self: Any) -> Any:
+    """Validate the paired Ascend profile and cache lifecycle settings."""
+    from lmcache.inference_profile import validate_config
+
+    validate_config(self)
+    if getattr(self, "enable_blending", False):
+        raise ValueError("CacheBlend was removed from the Ascend P4 inference profile")
     """Validate configuration"""
 
     _normalize_remote_fill_config(self)
@@ -992,13 +996,7 @@ def _validate_config(self: Any) -> Any:
             "must not run with an uninitialized Group-1 index cache."
         )
 
-    if self.enable_blending:
-        if not self.save_unfull_chunk:
-            logger.warning(
-                "Automatically setting save_unfull_chunk=True because "
-                "enable_blending=True"
-            )
-            self.save_unfull_chunk = True
+    pass  # Unsupported P4 branch removed.
 
     if (
         self.use_layerwise
@@ -1046,8 +1044,7 @@ def _validate_config(self: Any) -> Any:
         if self.max_local_cpu_size <= 0:
             raise ValueError(
                 "enable_shared_cpu_cache requires max_local_cpu_size > 0 "
-                "on rank0."
-                + shared_cpu_config_context
+                "on rank0." + shared_cpu_config_context
             )
         shared_size_gb = shared_cpu_cache_size_gb
         if shared_size_gb is not None and float(shared_size_gb) <= 0:
@@ -1060,8 +1057,7 @@ def _validate_config(self: Any) -> Any:
         if shared_name and shm_name and shared_name != shm_name:
             raise ValueError(
                 "shared_cpu_cache_name and shm_name refer to the same shared "
-                "slab and must not conflict."
-                + shared_cpu_config_context
+                "slab and must not conflict." + shared_cpu_config_context
             )
 
     if self.remote_fill_submission_mode not in _REMOTE_FILL_SUBMISSION_MODES:
@@ -1223,20 +1219,15 @@ def _validate_config(self: Any) -> Any:
         if self.dsa_group1_load_mode == "persistent_parallel_prefetch":
             persistent_requirements.update(
                 {
-                    "enable_dsa_cold_compact_load": (
-                        self.enable_dsa_cold_compact_load
-                    ),
+                    "enable_dsa_cold_compact_load": (self.enable_dsa_cold_compact_load),
                     "enable_shared_cpu_cache": enable_shared_cpu_cache,
                 }
             )
         if self.dsa_group1_load_mode == "persistent_direct_hbm":
-            save_only_first_rank = bool(
-                extra_config.get("save_only_first_rank", False)
-            )
+            save_only_first_rank = bool(extra_config.get("save_only_first_rank", False))
             persistent_requirements.update(
                 {
-                    "pd_role=sender|receiver": self.pd_role
-                    in {"sender", "receiver"},
+                    "pd_role=sender|receiver": self.pd_role in {"sender", "receiver"},
                     "enable_remote_lmcache_store=true": bool(
                         self.enable_remote_lmcache_store
                     ),
@@ -1270,9 +1261,7 @@ def _validate_config(self: Any) -> Any:
                     }
                 )
         missing_persistent_requirements = [
-            name
-            for name, enabled in persistent_requirements.items()
-            if not enabled
+            name for name, enabled in persistent_requirements.items() if not enabled
         ]
         if missing_persistent_requirements:
             raise ValueError(

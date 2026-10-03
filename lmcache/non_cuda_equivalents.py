@@ -55,7 +55,7 @@ class GPUKVFormat(IntEnum):
 
 # On XPU (Intel GPU), PyTorch 2.4+ supports pin_memory=True via SYCL USM
 # host allocation, enabling fast DMA for XPU<->CPU transfers.
-_XPU_PIN_MEMORY = hasattr(torch, "xpu") and torch.xpu.is_available()
+_XPU_PIN_MEMORY = False  # Host-only helper; native NPU uses c_ops.
 
 
 def alloc_pinned_numa_ptr(size: int, numa_id: int = 0) -> int:
@@ -142,9 +142,7 @@ def alloc_shm_pinned_ptr(
             "LMCache memory allocator"
         )
     if size <= 0:
-        raise ValueError(
-            f"alloc_shm_pinned_ptr requires size > 0, got {size}"
-        )
+        raise ValueError(f"alloc_shm_pinned_ptr requires size > 0, got {size}")
     if not shm_name:
         raise ValueError("shm_name is required for alloc_shm_pinned_ptr")
 
@@ -171,15 +169,11 @@ def alloc_shm_pinned_ptr(
     return ptr
 
 
-def attach_shm_pinned_ptr(
-    size: int, shm_name: str = "", writable: bool = True
-) -> int:
+def attach_shm_pinned_ptr(size: int, shm_name: str = "", writable: bool = True) -> int:
     """Attach to an existing shared-memory segment without unlink ownership."""
 
     if size <= 0:
-        raise ValueError(
-            f"attach_shm_pinned_ptr requires size > 0, got {size}"
-        )
+        raise ValueError(f"attach_shm_pinned_ptr requires size > 0, got {size}")
     name = shm_name.lstrip("/") if shm_name else None
     if not name:
         raise ValueError("shm_name is required for attach_shm_pinned_ptr")
@@ -188,8 +182,7 @@ def attach_shm_pinned_ptr(
     if size > shm.size:
         shm.close()
         raise ValueError(
-            f"Requested attach size {size} exceeds shm segment {name} "
-            f"size {shm.size}"
+            f"Requested attach size {size} exceeds shm segment {name} size {shm.size}"
         )
 
     array_type = ctypes.c_uint8 * size

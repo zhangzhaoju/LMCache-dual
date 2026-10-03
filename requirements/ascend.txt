@@ -1,6 +1,5 @@
-# P1 candidate: reuse the approved intranet environment; no implicit upgrades.
-# Transitional non-device dependencies remain until the P4 import-closure trim.
-# OpenCV stays on the Ascend baseline while shared media imports still exist.
+# P4 Ascend910B3 candidate; reuse the approved intranet environment.
+# Removed media/other-model direct dependencies; do not uninstall shared packages.
 aiofile
 aiofiles
 blake3

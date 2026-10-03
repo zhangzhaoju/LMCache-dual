@@ -1,0 +1,35 @@
+name: P4 source and host contracts
+on:
+  push:
+    branches: [p4]
+  pull_request:
+    branches: [p4]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Host-only dependencies (no torch or CANN)
+        run: python -m pip install pytest==9.0.2 numpy==1.26.4 msgspec==0.20.0 pyzmq==27.1.0 pydantic==2.12.5 setuptools==79.0.1 sphinx==7.2.6
+      - run: python -B tools/check_p4_profile.py
+      - run: python -B tools/check_npu_native.py
+      - name: Host contracts (tensor and NPU tests run in the intranet)
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONPATH: .
+        run: >-
+          python -m pytest -q --noconftest -p no:cacheprovider
+          tests/standalone --ignore=tests/standalone/test_glm52_metadata.py
+          ascend/tests/v1/test_cache_engine_close_cpu.py
+          ascend/tests/v1/test_direct_store_plan.py
+          ascend/tests/v1/test_remote_fill_config.py
+      - run: sphinx-build -W --keep-going -b html docs/source /tmp/p4-docs

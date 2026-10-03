@@ -312,7 +312,6 @@ PYBIND11_MODULE(c_ops, m) {
   m.def("unlink_shm", &unlink_shm, py::call_guard<py::gil_scoped_release>());
   m.def("multi_layer_kv_transfer", &multi_layer_kv_transfer);
   m.def("fused_multi_layer_kv_transfer", &fused_multi_layer_kv_transfer);
-  m.def("multi_layer_kv_transfer_310p", &multi_layer_kv_transfer_310p);
   m.def("single_layer_kv_transfer", &single_layer_kv_transfer_wrapper,
         py::arg("lmc_key_value_cache"), py::arg("vllm_kv_caches"),
         py::arg("slot_mapping"), py::arg("direction"),

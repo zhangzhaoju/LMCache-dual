@@ -210,46 +210,6 @@ void fused_multi_layer_kv_transfer(
   return;
 }
 
-void multi_layer_kv_transfer_310p(
-    torch::Tensor &key_value,            // [kv, num_layer, num_tokens, hidden]
-    const torch::Tensor &key_value_ptrs, // [num_layers]
-    const torch::Tensor &slot_mapping,   // [num_tokens]
-    const torch::Device &paged_memory_device, const int page_buffer_size,
-    const bool direction, const bool use_mla, const int num_kv_head,
-    const int head_size, const int blockSize, const int kvcache_format_raw) {
-  uint8_t *key_value_ptr = get_kernel_ptr<uint8_t, torch::Tensor>(key_value);
-
-  MultiLayerKVConfig config = prepare_multi_layer_kv_config(
-      key_value, key_value_ptrs, slot_mapping, paged_memory_device,
-      page_buffer_size, direction, use_mla, kvcache_format_raw);
-
-  const c10::OptionalDeviceGuard device_guard(paged_memory_device);
-  // we require the kv ptr list to be on the device too
-  const c10::OptionalDeviceGuard kv_device_guard(device_of(key_value_ptrs));
-
-  const aclrtStream stream = c10_npu::getCurrentNPUStream().stream();
-
-  at_npu::native::OpCommand cmd;
-  cmd.Name("multi_layer_kv_transfer_kernel_310p");
-  cmd.SetCustomHandler([config, stream, key_value_ptr, num_kv_head, head_size,
-                        blockSize]() -> int {
-    auto slot_num = vllm_ascend::get_dtype_from_torch(config.slot_type);
-    auto dtype_num = vllm_ascend::get_dtype_from_torch(config.scalar_type);
-    auto ascendcPlatform =
-        platform_ascendc::PlatformAscendCManager::GetInstance(config.socName);
-    uint32_t aiv_num = ascendcPlatform->GetCoreNumAiv();
-    kvcache_ops::multi_layer_kv_transfer_kernel_310p(
-        dtype_num, slot_num, config.kvcache_format, aiv_num, stream,
-        config.page_buffer_ptrs, key_value_ptr, config.slot_mapping_ptr,
-        config.hidden_dims, config.kv_size, config.num_layers,
-        config.page_buffer_size, config.num_tokens, config.direction,
-        num_kv_head, head_size, blockSize);
-    return 0;
-  });
-  cmd.Run();
-  return;
-};
-
 void multi_layer_kv_transfer_unilateral(
     torch::Tensor &key_value, const torch::Tensor &key_ptrs,
     const torch::Tensor &value_ptrs, const torch::Tensor &slot_mapping,

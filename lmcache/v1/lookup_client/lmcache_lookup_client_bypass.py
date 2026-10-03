@@ -56,34 +56,24 @@ class LMCacheBypassLookupClient(LookupClientInterface):
         request_configs: Optional[dict] = None,
     ) -> Optional[int]:
         try:
-            if not self.enable_blending:
-                # Process tokens to get hashes and offsets
-                hashes = []
-                offsets = []
-                for start, end, key in self.token_database.process_tokens(
-                    token_ids, make_key=False
-                ):
-                    hashes.append(key)
-                    offsets.append(end - start)
-                if not hashes:
-                    return 0
+            hashes = []
+            offsets = []
+            for start, end, key in self.token_database.process_tokens(
+                token_ids, make_key=False
+            ):
+                hashes.append(key)
+                offsets.append(end - start)
+            if not hashes:
+                return 0
 
-                # Call LMCacheEngine lookup with hashes and offsets
-                result = self.lmcache_engine.lookup(
-                    hashes=hashes,
-                    offsets=offsets,
-                    lookup_id=lookup_id,
-                    pin=True,
-                    request_configs=request_configs,
-                )
-            else:
-                # For blending mode, pass tokens directly
-                result = self.lmcache_engine.lookup(
-                    tokens=token_ids,
-                    lookup_id=lookup_id,
-                    pin=True,
-                    request_configs=request_configs,
-                )
+            # Call LMCacheEngine lookup with hashes and offsets
+            result = self.lmcache_engine.lookup(
+                hashes=hashes,
+                offsets=offsets,
+                lookup_id=lookup_id,
+                pin=True,
+                request_configs=request_configs,
+            )
 
             return result
 

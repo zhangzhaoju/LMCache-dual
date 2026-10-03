@@ -384,10 +384,7 @@ def validate_mla_config(config: LMCacheEngineConfig, use_mla: bool) -> None:
     if use_mla and (config.remote_serde != "naive" and config.remote_serde is not None):
         raise ValueError("MLA only works with naive serde mode..")
 
-    if use_mla and config.use_layerwise and config.enable_blending:
-        raise ValueError(
-            "We haven't supported MLA with Cacheblend yet. Please disable blending."
-        )
+    pass  # Unsupported P4 branch removed.
 
 
 def calculate_draft_layers(vllm_config: "VllmConfig") -> int:

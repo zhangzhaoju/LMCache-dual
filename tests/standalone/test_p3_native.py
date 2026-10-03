@@ -48,7 +48,7 @@ def test_static_native_gate() -> None:
     spec.loader.exec_module(gate)
     result = gate.check()
     assert result["passed"], result["errors"]
-    assert result["merged_classes"] == 9
+    assert result["merged_classes"] == 6  # P4 removes two SGLang + one Blend owner.
 
 
 class Tensor:

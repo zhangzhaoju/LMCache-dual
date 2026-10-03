@@ -218,18 +218,12 @@ def assert_layerwise_gpu_connector(gpu_connector: "DeviceConnectorInterface"):
     # Import at runtime to avoid circular dependency
     # First Party
     from lmcache.v1.npu_connector.npu_connectors import (
-        SGLangLayerwiseNPUConnector,
-        VLLMBufferLayerwiseNPUConnector,
         VLLMPagedMemLayerwiseNPUConnector,
     )
 
     assert isinstance(
         gpu_connector,
-        (
-            VLLMPagedMemLayerwiseNPUConnector,
-            VLLMBufferLayerwiseNPUConnector,
-            SGLangLayerwiseNPUConnector,
-        ),
+        (VLLMPagedMemLayerwiseNPUConnector,),
     )
 
 
@@ -439,14 +433,6 @@ def discover_gpu_kv_format(
             elif tensor_dim == 3:
                 # vllm MLA
                 detected_format = lmc_ops.GPUKVFormat.NL_X_NB_BS_HS
-    elif serving_engine == EngineType.SGLANG:
-        if list_depth == 1:
-            if kv_caches[0].shape[1] == 1:
-                # sglang MLA
-                detected_format = lmc_ops.GPUKVFormat.NL_X_NBBS_ONE_HS
-        elif list_depth == 2:
-            # sglang MHA (flash attention and flash infer)
-            detected_format = lmc_ops.GPUKVFormat.TWO_X_NL_X_NBBS_NH_HS
 
     if detected_format is not None:
         legible_print_gpu_kv_format(detected_format)

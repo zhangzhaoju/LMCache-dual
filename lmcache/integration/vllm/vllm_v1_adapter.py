@@ -81,7 +81,6 @@ from lmcache.v1.cache_engine import (
     LayerwiseStoreResult,
     LMCacheEngine,
 )
-from lmcache.v1.compute.blend import LMCBlenderBuilder
 from lmcache.v1.config import LMCacheEngineConfig
 from lmcache.v1.config_base import validate_and_set_config_value
 from lmcache.v1.content_diagnostics import (
@@ -2230,17 +2229,7 @@ class LMCacheConnectorV1Impl:
             self.use_layerwise = config.use_layerwise
             self.enable_blending = config.enable_blending
 
-            if self.enable_blending:
-                assert self.lmcache_engine is not None
-                assert self.lmcache_engine.gpu_connector is not None, (
-                    "GPU connector must be available for blending"
-                )
-                self.blender = LMCBlenderBuilder.get_or_create(
-                    ENGINE_NAME,
-                    self.lmcache_engine,
-                    self.lmcache_engine.gpu_connector,
-                    config,
-                )
+            pass  # Unsupported P4 branch removed.
 
         # Legacy compatibility check
         self._check_legacy_register_kv_caches()
@@ -7776,18 +7765,7 @@ class LMCacheConnectorV1Impl:
             if self.use_layerwise or request.is_sparse_decode:
                 sync = load_idx == len(loadable_requests) - 1
                 # NOTE(Jiayi): Perform blending before layerwise prefix caching
-                if self.enable_blending:
-                    # TODO(Jiayi): Need to make prefix caching and blending compatible
-                    if token_mask is None:
-                        token_mask = torch.ones(token_count, dtype=torch.bool)
-                    self.blender.blend(
-                        retrieve_tokens,
-                        token_mask,
-                        kvcaches=kvcaches,
-                        slot_mapping=slot_mapping,
-                        vllm_cached_tokens=request.load_spec.vllm_cached_tokens,
-                    )
-                elif request.is_sparse_decode:
+                if request.is_sparse_decode:
                     prior_retrieve_state = sparse_bound_state
                     prior_retrieve_snapshot = None
                     invalidation_reason = None
@@ -9766,15 +9744,14 @@ class LMCacheConnectorV1Impl:
                 if request.is_last_prefill:
                     if request.disagg_spec:
                         request.disagg_spec.is_last_prefill = True
-                elif not self.enable_blending:
-                    aligned_token_len = (
-                        len(token_ids)
-                        // self._lmcache_chunk_size
-                        * self._lmcache_chunk_size
-                    )
-                    token_ids = token_ids[:aligned_token_len]
-                    store_mask = store_mask[:aligned_token_len]
-                    slot_mapping = slot_mapping[:aligned_token_len]
+                aligned_token_len = (
+                    len(token_ids)
+                    // self._lmcache_chunk_size
+                    * self._lmcache_chunk_size
+                )
+                token_ids = token_ids[:aligned_token_len]
+                store_mask = store_mask[:aligned_token_len]
+                slot_mapping = slot_mapping[:aligned_token_len]
 
                 slot_mapping, store_kwargs = self._prepare_direct_store_inputs(
                     request,
