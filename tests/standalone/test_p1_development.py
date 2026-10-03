@@ -338,6 +338,7 @@ class DevelopmentContracts(unittest.TestCase):
             "torch": {"path": "/fixture/torch", "cmake": "/fixture/cmake", "abi": 1},
         }
         directories = []
+        configured_socs = []
         install = None
         selected = None
 
@@ -360,6 +361,16 @@ class DevelopmentContracts(unittest.TestCase):
                 install = Path(prefix).parent
                 selected = Path(prefix).name.removesuffix("_ascend")
                 directories.append((command[command.index("-B") + 1], selected))
+                configured_socs.append(
+                    (
+                        selected,
+                        next(
+                            value.split("=", 1)[1]
+                            for value in command
+                            if value.startswith("-DSOC_VERSION=")
+                        ),
+                    )
+                )
             if command[:2] == ["cmake", "--install"]:
                 for namespace, patterns in BUILD.required_artifacts(
                     selected, info
@@ -393,6 +404,10 @@ class DevelopmentContracts(unittest.TestCase):
                     command.build_lib = str(self.root / "wheel-lib")
                     command.run()
         self.assertEqual(len({directory for directory, _ in directories}), 4)
+        self.assertEqual(
+            configured_socs,
+            [("lmcache", "Ascend910B3")] * 2 + [("vllm", "ascend910b3")] * 2,
+        )
         for directory, primary in directories:
             for namespace, patterns in BUILD.required_artifacts(primary, info).items():
                 for pattern in patterns:
