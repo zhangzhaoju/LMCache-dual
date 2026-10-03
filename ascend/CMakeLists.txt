@@ -16,9 +16,7 @@ add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=${GLIBCXX_USE_CXX11_ABI})
 set(RUN_MODE "npu" CACHE STRING "cpu/sim/npu")
 
 # for the device kernels compilation
-if(NOT SOC_VERSION STREQUAL "ascend910b3")
-    message(FATAL_ERROR "P4 supports only SOC_VERSION=ascend910b3")
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/ascend_soc.cmake")
 set(ARCH ${ARCH})
 # custom compile definition for kernels hostside compilation
 set(ASCEND_AICORE_ARCH ${ASCEND_AICORE_ARCH})

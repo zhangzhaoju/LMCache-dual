@@ -46,6 +46,24 @@ Use a new output directory. The historical filename ``p1_dev.py`` is intentional
 it now checks P4 identity. Rebuild native artifacts and the strict editable link
 tree after switching phases. Source-only or stale P3 artifacts are not accepted.
 
+SoC spelling during installation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The shell profile uses ``SOC_VERSION=ascend910b3``. The LMCache Python builder
+reads CANN's case-sensitive ``Ascend910B3.ini`` and passes
+``-DSOC_VERSION=Ascend910B3`` to CMake. The CMake gate accepts case variants
+of this one device and normalizes the downstream value to ``Ascend910B3``.
+Other devices and empty values still fail; do not remove the hardware guard.
+
+The initial P4 revision rejected the builder's spelling with
+``P4 supports only SOC_VERSION=ascend910b3``. Update to the corrected paired
+P4 revision and rerun the editable installation above in every affected
+container. Changing the environment variable alone cannot fix that revision.
+Do not change dependencies or manually remove the failed build directory;
+each retry already uses a fresh native build directory. This fix also applies
+to ordinary wheel builds, which use the same builder. Passing the SoC gate
+does not establish native compilation, ABI or inference acceptance.
+
 Validation
 ----------
 
