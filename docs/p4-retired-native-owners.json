@@ -1,0 +1,18 @@
+{
+  "approval": "user_20261003_remove_CacheBlend_SGLang_MindSpore_and_keep_only_910B3",
+  "historical_contract": "docs/p3-native-migration.json",
+  "recovery_tag": "p3-frozen-20261003",
+  "removed_classes": {
+    "lmcache/v1/npu_connector/npu_connectors.py": [
+      "SGLangNPUConnector",
+      "SGLangLayerwiseNPUConnector",
+      "VLLMBufferLayerwiseNPUConnector"
+    ]
+  },
+  "removed_methods": {
+    "lmcache/v1/npu_connector/npu_connectors.py:VLLMPagedMemNPUConnectorV2": [
+      "to_gpu_310p", "from_gpu_310p"
+    ]
+  },
+  "removed_prefixes": ["lmcache/v1/compute/"]
+}

@@ -3,7 +3,6 @@ include requirements/ascend.txt requirements/build.txt
 graft lmcache
 graft ascend
 recursive-include csrc *
-recursive-include cmake *
 global-exclude __pycache__ *.pyc *.pyo
 global-exclude .git
 prune build
@@ -19,3 +18,12 @@ prune ascend/docs
 exclude ascend/setup.py ascend/pyproject.toml ascend/setup.cfg
 prune ascend/scripts
 include docs/p3-native-migration.json
+
+prune ascend/tests
+prune ascend/examples
+prune ascend/docs
+prune ascend/tools
+prune ascend/benchmarks
+prune ascend/benchmark
+recursive-include tools check_p4*.py check_npu*.py p4_*.py
+include docs/p4-retired-native-owners.json

@@ -732,10 +732,7 @@ class LMCacheEngine:
         if self.use_layerwise:
             if metadata.use_mla:
                 self.fmt = MemoryFormat.KV_MLA_LATENT_FMT
-            elif config.enable_blending:
-                self.fmt = MemoryFormat.KV_2TD
-            else:
-                self.fmt = MemoryFormat.KV_T2D
+            self.fmt = MemoryFormat.KV_T2D
         if metadata.use_mla:
             self.fmt = MemoryFormat.KV_MLA_LATENT_FMT
         self._report_shared_cpu_sparse_capacity_sanity()
@@ -7106,7 +7103,6 @@ class LMCacheEngine:
                 f"Error during cleanup_memory_objs for lookup_id={lookup_id}: {e}"
             )
 
-    @_lmcache_nvtx_annotate
     def compress(
         self,
         tokens: Union[torch.Tensor, List[int]],
@@ -7114,57 +7110,9 @@ class LMCacheEngine:
         location: str,
         event_id: str,
     ) -> int:
-        assert self.storage_manager is not None
-        if method not in ["cachegen"]:
-            logger.warning(f"Unsupported compression method: {method}.")
-            return 0
+        """Reject removed GPU CacheGen without changing stored KV objects."""
+        raise ValueError("Ascend P4 does not support CacheGen compression")
 
-        # First Party
-        from lmcache.v1.storage_backend.naive_serde import CreateSerde
-
-        serializer, _ = CreateSerde(method, self.metadata, self.config)
-
-        num_tokens = self.lookup(
-            tokens,
-            search_range=[location],
-            lookup_id=event_id,
-            pin=True,
-        )
-
-        if not num_tokens:
-            logger.debug("Move is not performed as there are no tokens to move.")
-            return 0
-
-        block_mapping = self.lookup_pins[event_id]
-        assert len(block_mapping) == 1
-        keys = block_mapping[location]
-
-        memory_objs = self.storage_manager.batched_get(
-            keys=keys,
-            location=location,
-        )
-        assert None not in memory_objs, (
-            "LMCacheEngine.compress: Failed to get memory objects to compress"
-        )
-
-        compressed_memory_objs = []
-        for memory_obj in memory_objs:
-            assert memory_obj is not None
-            compressed_memory_obj = serializer.serialize(memory_obj)
-            memory_obj.unpin()
-            compressed_memory_objs.append(compressed_memory_obj)
-
-        self.storage_manager.batched_remove(keys, locations=[location])
-
-        self.storage_manager.batched_put(
-            keys=keys,
-            memory_objs=compressed_memory_objs,
-            location=location,
-        )
-
-        return num_tokens
-
-    @_lmcache_nvtx_annotate
     def decompress(
         self,
         tokens: Union[torch.Tensor, List[int]],
@@ -7172,57 +7120,8 @@ class LMCacheEngine:
         location: str,
         event_id: str,
     ) -> int:
-        assert self.storage_manager is not None
-        if method not in ["cachegen"]:
-            logger.warning(f"Unsupported decompression method: {method}.")
-            return 0
-
-        # First Party
-        from lmcache.v1.storage_backend.naive_serde import CreateSerde
-
-        _, deserializer = CreateSerde(method, self.metadata, self.config)
-
-        num_tokens = self.lookup(
-            tokens,
-            search_range=[location],
-            lookup_id=event_id,
-            pin=True,
-        )
-
-        if not num_tokens:
-            logger.debug("there are no tokens to decompress.")
-            return 0
-
-        block_mapping = self.lookup_pins[event_id]
-        assert len(block_mapping) == 1
-        keys = block_mapping[location]
-
-        compressed_memory_objs = self.storage_manager.batched_get(
-            keys=keys,
-            location=location,
-        )
-
-        assert None not in compressed_memory_objs, (
-            "LMCacheEngine.compress: Failed to get compressed "
-            "memory objects to decompress"
-        )
-
-        memory_objs = []
-        for compressed_memory_obj in compressed_memory_objs:
-            assert compressed_memory_obj is not None
-            memory_obj = deserializer.deserialize(compressed_memory_obj)
-            compressed_memory_obj.unpin()
-            memory_objs.append(memory_obj)
-
-        self.storage_manager.batched_remove(keys, locations=[location])
-
-        self.storage_manager.batched_put(
-            keys=keys,
-            memory_objs=memory_objs,
-            location=location,
-        )
-
-        return num_tokens
+        """Reject removed GPU CacheGen without changing stored KV objects."""
+        raise ValueError("Ascend P4 does not support CacheGen compression")
 
     @_lmcache_nvtx_annotate
     def _common_lookup_unpin(self, lookup_id: str) -> None:
@@ -17141,8 +17040,7 @@ class LMCacheEngineBuilder:
         config: LMCacheEngineConfig,
         metadata: LMCacheMetadata,
     ) -> TokenDatabase:
-        if config.enable_blending:
-            return SegmentTokenDatabase(config, metadata)
+        pass  # Unsupported P4 branch removed.
         return ChunkedTokenDatabase(config, metadata)
 
     @classmethod

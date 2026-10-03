@@ -2,6 +2,16 @@
 
 Guidelines for AI coding agents (Copilot, Cursor, Claude Code, etc.) working in this repository.
 
+## Current fork: P4 profile pruning (2026-10-03)
+
+The user authorized freezing P3 and implementing P4 on `p4`. Preserve both
+`p3-frozen-20261003` tags and earlier phase branches. Keep only native Ascend/vLLM
+integration and the GLM-5.2 DSA/MTP cache lifecycle, including CPU KV storage,
+P/D, RemoteFill, checkpoint and recovery. Remove other vendors, legacy plugins,
+SGLang/MindSpore and CacheBlend. LoRA/pooling removal is explicitly approved.
+These instructions supersede the P3/P2 branch restrictions below. Do not build
+native artifacts, install torch/CANN or touch intranet services on this host.
+
 ## Current fork: P3 native Ascend integration
 
 On 2026-09-28 the user authorized starting P3 from the complete P2 code and

@@ -1231,10 +1231,7 @@ class LocalCPUBackend(AllocatorBackendInterface):
         )
         if fmt is None:
             if self.layerwise:
-                if self.enable_blending:
-                    fmt = MemoryFormat.KV_2TD
-                else:
-                    fmt = MemoryFormat.KV_T2D
+                fmt = MemoryFormat.KV_T2D
             else:
                 fmt = MemoryFormat.KV_2LTD
 
@@ -1340,10 +1337,7 @@ class LocalCPUBackend(AllocatorBackendInterface):
         )
         if fmt is None:
             if self.layerwise:
-                if self.enable_blending:
-                    fmt = MemoryFormat.KV_2TD
-                else:
-                    fmt = MemoryFormat.KV_T2D
+                fmt = MemoryFormat.KV_T2D
             else:
                 fmt = MemoryFormat.KV_2LTD
 

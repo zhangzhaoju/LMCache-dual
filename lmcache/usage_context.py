@@ -242,26 +242,10 @@ class UsageContext:
         return num_cpu, cpu_type, cpu_family_model_stepping
 
     def _get_gpu_info(self):
-        if torch.cuda.is_available():
-            device_property = torch.cuda.get_device_properties(0)
-            gpu_count = torch.cuda.device_count()
-            gpu_type = device_property.name
-            gpu_memory_per_device = device_property.total_memory
-        elif torch.xpu.is_available():
-            device_property = torch.xpu.get_device_properties(0)
-            gpu_count = torch.xpu.device_count()
-            gpu_type = device_property.name
-            gpu_memory_per_device = device_property.total_memory
-        elif hasattr(torch, "hpu") and torch.hpu.is_available():
-            device_property = torch.hpu.get_device_properties(0)
-            gpu_count = torch.hpu.device_count()
-            gpu_type = device_property.name
-            gpu_memory_per_device = device_property.total_memory
-        else:
-            gpu_count = psutil.cpu_count(logical=False)
-            gpu_type = platform.processor()
-            gpu_memory_per_device = psutil.virtual_memory()
-        return gpu_count, gpu_type, gpu_memory_per_device
+        if hasattr(torch, "npu") and torch.npu.is_available():
+            properties = torch.npu.get_device_properties(0)
+            return torch.npu.device_count(), properties.name, properties.total_memory
+        return 0, "Ascend NPU unavailable", 0
 
     def _get_source(self):
         path = "/proc/1/cgroup"

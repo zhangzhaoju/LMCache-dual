@@ -33,7 +33,7 @@ template <typename T, typename TENSOR_TYPE>
 T *get_kernel_ptr(TENSOR_TYPE &tensor) {
   torch::Device device = tensor.device();
   // NPU should be using PrivateUse1
-  if (device.is_privateuseone() || device.is_cuda()) {
+  if (device.is_privateuseone()) {
     return static_cast<T *>(tensor.data_ptr());
   } else if (device.is_cpu()) {
     // find device ptr based on the host pinned ptr

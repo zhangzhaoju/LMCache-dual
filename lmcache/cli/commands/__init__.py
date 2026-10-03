@@ -15,7 +15,6 @@ from lmcache.cli.commands.kvcache import KVCacheCommand
 from lmcache.cli.commands.mock import MockCommand
 from lmcache.cli.commands.ping import PingCommand
 from lmcache.cli.commands.query import QueryCommand
-from lmcache.cli.commands.server import ServerCommand
 
 ALL_COMMANDS: list[BaseCommand] = [
     MockCommand(),
@@ -23,7 +22,6 @@ ALL_COMMANDS: list[BaseCommand] = [
     DescribeCommand(),
     PingCommand(),
     QueryCommand(),
-    ServerCommand(),
     BenchCommand(),
 ]
 
