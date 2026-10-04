@@ -62,13 +62,13 @@ def test_310p_native_execution_and_cuda_pointer_paths_removed() -> None:
     """Removed hardware has no public binding or retained connector methods."""
     root = Path(__file__).resolve().parents[2]
     for relative in (
-        "ascend/csrc/mem_kernels.h",
-        "ascend/csrc/mem_kernels.cpp",
-        "ascend/csrc/pybind.cpp",
+        "csrc/mem_kernels.h",
+        "csrc/mem_kernels.cpp",
+        "csrc/pybind.cpp",
         "lmcache/v1/npu_connector/npu_connectors.py",
     ):
         source = (root / relative).read_text()
         assert "multi_layer_kv_transfer_310p" not in source
         assert "to_gpu_310p" not in source
         assert "from_gpu_310p" not in source
-    assert "device.is_cuda()" not in (root / "ascend/csrc/utils.h").read_text()
+    assert "device.is_cuda()" not in (root / "csrc/utils.h").read_text()

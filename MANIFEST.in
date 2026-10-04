@@ -1,29 +1,18 @@
 include LICENSE README.md pyproject.toml setup.py p1_build.py p1_dev.py CMakeLists.txt .gitmodules
 include requirements/ascend.txt requirements/build.txt
+include submodule-materials.json
+include docs/design/layout-migration.json
+include docs/p3-native-migration.json docs/p4-retired-native-owners.json
 graft lmcache
-graft ascend
-recursive-include csrc *
-global-exclude __pycache__ *.pyc *.pyo
-global-exclude .git
+graft csrc
+graft cmake
+graft third_party
+recursive-include tools check_p4*.py check_npu*.py check_native_layout.py p4_*.py
+global-exclude __pycache__ *.pyc *.pyo .git .git/**
 prune build
 prune dist
-prune ascend/.git
-prune ascend/build
-prune ascend/output
-prune ascend/.deps
-prune ascend/legacy-p3
-prune ascend/tests
-prune ascend/examples
-prune ascend/docs
-exclude ascend/setup.py ascend/pyproject.toml ascend/setup.cfg
-prune ascend/scripts
-include docs/p3-native-migration.json
-
-prune ascend/tests
-prune ascend/examples
-prune ascend/docs
-prune ascend/tools
-prune ascend/benchmarks
-prune ascend/benchmark
-recursive-include tools check_p4*.py check_npu*.py p4_*.py
-include docs/p4-retired-native-owners.json
+prune csrc/build
+prune csrc/output
+prune third_party/kvcache-ops/.git
+prune third_party/kvcache-ops/build
+prune third_party/kvcache-ops/output
