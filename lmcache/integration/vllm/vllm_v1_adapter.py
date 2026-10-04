@@ -9744,14 +9744,15 @@ class LMCacheConnectorV1Impl:
                 if request.is_last_prefill:
                     if request.disagg_spec:
                         request.disagg_spec.is_last_prefill = True
-                aligned_token_len = (
-                    len(token_ids)
-                    // self._lmcache_chunk_size
-                    * self._lmcache_chunk_size
-                )
-                token_ids = token_ids[:aligned_token_len]
-                store_mask = store_mask[:aligned_token_len]
-                slot_mapping = slot_mapping[:aligned_token_len]
+                else:
+                    aligned_token_len = (
+                        len(token_ids)
+                        // self._lmcache_chunk_size
+                        * self._lmcache_chunk_size
+                    )
+                    token_ids = token_ids[:aligned_token_len]
+                    store_mask = store_mask[:aligned_token_len]
+                    slot_mapping = slot_mapping[:aligned_token_len]
 
                 slot_mapping, store_kwargs = self._prepare_direct_store_inputs(
                     request,
