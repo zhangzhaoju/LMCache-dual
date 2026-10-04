@@ -20,6 +20,13 @@ from lmcache.v1.cache_engine import LMCacheEngine, LMCacheEngineBuilder
 from lmcache.v1.memory_management import MixedMemoryAllocator
 from lmcache.v1.metadata import LMCacheMetadata
 
+# One tests package now owns both the original fixtures and NPU cases.
+# The old donor tests used a synthetic lmcache_tests alias plus an import-time
+# monkeypatch of create_gpu_connector. tests.v1.utils now imports the native
+# connector directly. Host-only AST tests use --noconftest, as before.
+# The wrappers for the multiprocess server removed in P4 are now provenance
+# records in docs/design/retired-tests, not recursively imported test modules.
+
 if importlib.util.find_spec("pytest_benchmark") is None:
 
     @pytest.fixture

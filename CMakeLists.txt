@@ -12,7 +12,7 @@ if(NOT DEFINED GLIBCXX_USE_CXX11_ABI OR NOT DEFINED P1_HOST_INSTALL_DIR)
   message(FATAL_ERROR "Use the unified Python build entry to supply ABI/install paths")
 endif()
 add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=${GLIBCXX_USE_CXX11_ABI})
-add_subdirectory(ascend)
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/npu_extensions.cmake")
 
 # Host allocators/storage must not be lost with NO_CUDA_EXT.
 pybind11_add_module(native_storage_ops

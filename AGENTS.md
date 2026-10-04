@@ -1,5 +1,16 @@
 # AGENTS.md
 
+## Current fork: native repository layout (2026-10-04)
+
+Work on `refactor/native-layout` from immutable `p4-frozen-20261004`.
+The user approved removing the repository-root `ascend/` donor tree. Integrate
+native sources into `csrc/`, `cmake/`, `third_party/`, and the root tests/tools.
+Preserve native Python owners, algorithms, ABI names, pinned materials and the
+P4 910B3/GLM-5.2 scope. Keep both colliding test contracts with explicit names;
+do not overwrite one suite with another. Frozen P4 and earlier refs must not
+change. This overrides historical branch/plugin instructions below. Native
+builds and 2P2D acceptance remain in the intranet, not this source workstation.
+
 Guidelines for AI coding agents (Copilot, Cursor, Claude Code, etc.) working in this repository.
 
 ## Current fork: P4 profile pruning (2026-10-03)

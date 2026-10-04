@@ -140,3 +140,5 @@ operator/dist/
 operator/cover.out
 operator/coverage.html
 operator/Dockerfile.cross
+# Generated material provenance and local diagnostic output.
+/submodule-materials.json

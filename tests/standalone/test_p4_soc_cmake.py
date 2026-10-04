@@ -20,7 +20,7 @@ def run_soc_gate(tmp_path: Path, soc: str | None) -> subprocess.CompletedProcess
             "cmake is required for the P4 SoC gate regression (script mode only)"
         )
     script = tmp_path / "soc_probe.cmake"
-    gate = (ROOT / "ascend/cmake/ascend_soc.cmake").as_posix()
+    gate = (ROOT / "cmake/ascend_soc.cmake").as_posix()
     script.write_text(
         "cmake_minimum_required(VERSION 3.16)\n"
         f'include("{gate}")\n'
@@ -72,7 +72,7 @@ def test_unsupported_soc_is_rejected(tmp_path: Path, soc: str | None) -> None:
 
 def test_gate_precedes_native_subdirectories() -> None:
     """The tested gate is wired into the actual native CMake entry point."""
-    source = (ROOT / "ascend/CMakeLists.txt").read_text()
+    source = (ROOT / "cmake/npu_extensions.cmake").read_text()
     assert source.index(
-        'include("${CMAKE_CURRENT_LIST_DIR}/cmake/ascend_soc.cmake")'
+        'include("${CMAKE_CURRENT_LIST_DIR}/ascend_soc.cmake")'
     ) < source.index("add_subdirectory(third_party/kvcache-ops)")

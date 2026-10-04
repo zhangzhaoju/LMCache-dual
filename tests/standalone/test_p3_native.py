@@ -215,7 +215,7 @@ def test_pinned_allocator_keeps_registered_host_ownership() -> None:
 
 
 def test_cpp_layout_enum_is_defined_without_python_injection() -> None:
-    source = (ROOT / "ascend/csrc/pybind.cpp").read_text()
+    source = (ROOT / "csrc/pybind.cpp").read_text()
     for value, name in enumerate(
         [
             "NB_NL_TWO_BS_NH_HS",
