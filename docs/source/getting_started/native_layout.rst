@@ -1,8 +1,8 @@
 Native repository layout and installation
 =========================================
 
-This branch removes the repository-root ``ascend/`` donor tree. It derives from
-immutable ``p4-frozen-20261004`` and does not change inference algorithms, cache
+P5/P6 derive from immutable ``native-layout-frozen-20261005``, which removed
+the repository-root ``ascend/`` donor tree. They do not change inference algorithms, cache
 protocols or native ABI names. The supported profile remains Ascend910B3 and
 GLM-5.2 native text generation, with DSA dual groups, MTP, CPU KV storage/sharing,
 P/D, RemoteFill, checkpoint and recovery. Runtime C8 remains disabled for acceptance.
@@ -36,8 +36,8 @@ Install in a dedicated intranet environment
 ------------------------------------------------
 
 Use a new checkout in each dedicated test container. Do not change an active
-P4 baseline environment. Install ``lmcache==0.4.3+ascend.layout1`` together with
-``vllm==0.18.0+ascend.layout1``; rebuild both native extensions and strict editable
+baseline environment. Install ``lmcache==0.4.3+ascend.p5p6rc1`` together with
+``vllm==0.18.0+ascend.p5p6rc1``; rebuild both native extensions and strict editable
 link trees. The historical command name ``p1_dev.py`` remains supported.
 
 Keep Python 3.11/aarch64, CANN 8.5.1, torch 2.9.0, torch-npu 2.9.0.post2 and
@@ -101,5 +101,7 @@ both TP8/DP2 and TP4/DP4 regression requirements unchanged.
 Only the three previously approved op-compile-tool 0.1.0 standard-library
 metadata errors may be waived. All other dependency errors remain blocking.
 Source/host success does not establish CANN compilation, ABI or model acceptance.
-Rollback requires both repositories and installations from the frozen P4 pair
-in an independent environment, never mixed P4/layout1 packages.
+Rollback requires both repositories and installations from the frozen native-layout
+pair in an independent environment, never mixed candidate/layout1 packages.
+The final P6 pair contains all P5 preparation and receives one combined intranet
+qualification campaign. Source checks do not authorize production cutover.

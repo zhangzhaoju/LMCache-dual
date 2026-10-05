@@ -67,7 +67,7 @@ def inspect_runtime(order: int, npu: bool = False) -> dict:
         )
     ]
     assert not forbidden, f"Retired runtime imports: {forbidden}"
-    expected = {"vllm": "0.18.0+ascend.layout1", "lmcache": "0.4.3+ascend.layout1"}
+    expected = {"vllm": "0.18.0+ascend.p5p6rc1", "lmcache": "0.4.3+ascend.p5p6rc1"}
     for name, version in expected.items():
         assert metadata.version(name) == version, f"Wrong paired distribution: {name}"
     from lmcache import c_ops
