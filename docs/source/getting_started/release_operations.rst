@@ -14,9 +14,10 @@ Follow :doc:`baseline_validation` to reinstall both packages in all four test
 containers using the same strict editable and launch commands as native-layout.
 This baseline comparison does not require switching to wheels or a new image;
 do not change deployment mode or inference parameters just for this comparison.
-Install both candidate distributions in every test container. The existing
-``p1_dev.py`` materials, doctor, build, editable, install and verify commands
-remain supported. Do not switch a running editable checkout or update only one
+Install both candidate distributions in every test container with standard pip.
+Root ``setup.py`` implements editable, ``bdist_wheel`` and ``sdist``; the read-only
+``tools/check_native_layout.py`` checks installed paths or wheel contents.
+Do not switch a running editable checkout or update only one
 package. Formal release qualification still covers ordinary wheels, sdist
 rebuilds and a clean image with a digest-pinned prepared base. Label editable
 evidence accurately; it is not wheel/image evidence. The reviewer decides which
