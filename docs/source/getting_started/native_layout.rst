@@ -41,7 +41,7 @@ Install in a dedicated intranet environment
 Use a new checkout in each dedicated test container. Do not change an active
 baseline environment. Install ``lmcache==0.4.3+ascend.p5p6rc1`` together with
 ``vllm==0.18.0+ascend.p5p6rc1``; rebuild both native extensions and strict editable
-link trees. The historical command name ``p1_dev.py`` remains supported.
+link trees. Use standard pip and root ``setup.py``, without a phase installer.
 
 Keep Python 3.11/aarch64, CANN 8.5.1, torch 2.9.0, torch-npu 2.9.0.post2 and
 transformers 5.2.0. No automatic dependency upgrades or build-time downloads
@@ -49,21 +49,22 @@ are allowed. Fetching the pinned submodule through an approved proxy is an
 explicit preparation step, separate from building.
 
 Use the complete paired command sequence in :doc:`baseline_validation`,
-including CANN setup, old-install handling and per-container checks. The root
-``p1_dev.py`` materials, doctor, editable and verify interfaces are unchanged.
-Do not install only LMCache and omit vLLM. Run verify and cold imports from
+including CANN setup, old-install handling and per-container checks. Run
+``pip install -e . --no-build-isolation --no-deps --no-index`` in each repository.
+Do not install only LMCache and omit vLLM. Run installation checks and cold imports from
 ``/tmp`` or another directory outside both source checkouts.
 
 The pinned kvcache-ops commit is
-``9f18d2339bc58a43429f7d5bdaef1628c820eff5``. An approved local submodule checkout
-can also be supplied to ``materials --from-submodule``. Material provenance is
-now written to root ``submodule-materials.json``; an sdist must contain both
-the manifest and actual payloads. The script refuses changed material trees.
+``9f18d2339bc58a43429f7d5bdaef1628c820eff5``. Initialize it via the normal Git
+submodule workflow. Root setup.py automatically validates/registers clean pinned
+materials during native builds and sdist generation, without downloading them.
+The root ``submodule-materials.json`` and payloads must be included in an sdist.
+Changed payloads or existing invalid manifests are rejected, never overwritten.
 
-Use ``p1_dev.py build --output <new-directory>`` for a regular wheel. The SoC
+Use ``python setup.py bdist_wheel`` or ``python setup.py sdist`` for artifacts. The SoC
 gate still normalizes only case variants of 910B3 to CANN's ``Ascend910B3``;
-other devices remain rejected. ``--isolated-env`` does not bypass old package
-conflicts. Start with a clean dedicated environment, not an old P4 installation.
+other devices remain rejected. Standard pip does not create a dedicated serving
+environment or remove obsolete plugins. Start with a clean dedicated container.
 
 Changing an old checkout in place can leave ignored donor build/material files.
 The layout gate rejects any remaining root ``ascend/``, including links. Prefer
@@ -75,8 +76,9 @@ Validation and rollback
 ``tools/check_native_layout.py --source-only`` verifies source structure and
 byte-identical frozen runtime/native implementations without compiler probes.
 It reports absent submodule payloads but is not a build-material approval.
-After registering real materials, run it without ``--source-only`` and run
-``p1_dev.py doctor`` for dependency/material checks.
+After setup.py registers real materials, run it without ``--source-only``.
+After installation use ``tools/check_native_layout.py --installed editable``
+(or ``wheel``) for read-only path/resource checks and the paired dependency gate.
 
 ``tools/run_layout_host_checks.py --list`` shows the explicit host subset and
 deferred tensor cases. Run without ``--list`` for host validation with sibling
