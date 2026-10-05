@@ -1,6 +1,11 @@
 P4: native Ascend910B3 / GLM-5.2 cache runtime
 ================================================
 
+.. note::
+
+   Historical P4 record only. Current P6 installation and deployment use
+   :doc:`baseline_validation`. Do not mix the P4 pair below with current sources.
+
 This is a source candidate, not intranet build/ABI/model acceptance.
 Use ``lmcache==0.4.3+ascend.p4`` with ``vllm==0.18.0+ascend.p4``.
 The immutable input tag is ``p3-frozen-20261003`` in both repositories.

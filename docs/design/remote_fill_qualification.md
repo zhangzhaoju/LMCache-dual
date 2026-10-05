@@ -1,5 +1,11 @@
 # Direct Remote LMCache qualification
 
+> Historical protocol/qualification notes. The standalone plugin connector and
+> old tool paths below are not current installation instructions. For P6 use
+> [the baseline installation guide](../source/getting_started/baseline_validation.rst),
+> native LMCacheConnectorV1 and the validated native-layout configuration.
+> Retain these notes as design provenance, not as a replacement deployment recipe.
+
 This runbook applies the production-path qualification plan. It does not claim
 that native direct placement has passed C1 or production qualification.
 The production default remains disabled, and the conservative wire protocol is

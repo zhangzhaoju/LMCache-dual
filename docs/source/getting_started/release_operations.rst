@@ -10,11 +10,17 @@ the candidate, not a completed qualification.
 Installation and evidence
 -------------------------
 
+Follow :doc:`baseline_validation` to reinstall both packages in all four test
+containers using the same strict editable and launch commands as native-layout.
+This baseline comparison does not require switching to wheels or a new image;
+do not change deployment mode or inference parameters just for this comparison.
 Install both candidate distributions in every test container. The existing
 ``p1_dev.py`` materials, doctor, build, editable, install and verify commands
 remain supported. Do not switch a running editable checkout or update only one
-package. Strict editable is for debugging; qualification also covers ordinary
-wheels, sdist rebuilds and a clean image with a digest-pinned prepared base.
+package. Formal release qualification still covers ordinary wheels, sdist
+rebuilds and a clean image with a digest-pinned prepared base. Label editable
+evidence accurately; it is not wheel/image evidence. The reviewer decides which
+functional evidence can be reused based on provenance and installation differences.
 
 Keep Python 3.11/aarch64, CANN 8.5.1, torch 2.9.0, torch-npu 2.9.0.post2,
 transformers 5.2.0 and triton-ascend 3.2.0.dev20260322 unchanged. Build/install

@@ -1,6 +1,11 @@
 ﻿
 # Deployment guide
 
+> Historical plugin deployment reference, not current P6 installation instructions.
+> The standalone LMCache-Ascend repository, image and four-package workflow below
+> are retired. Use the repository-local [baseline installation guide](../source/getting_started/baseline_validation.rst)
+> with the paired native packages. Do not build or deploy the old examples below.
+
 ## Docker
 <!-- Pull pre built image-->
 To build the container image from the dockerfile, run: 
@@ -131,5 +136,4 @@ The user can also change the RLIMITS with the following command:
 ulimit -l unlimited # Update with the amount of memory you need to lock in KBs
 ```
 Locking a large amount of memory is required when the version of the Ascend driver is < 25. We warmly encourage the user to update the driver version to 25. 
-
 

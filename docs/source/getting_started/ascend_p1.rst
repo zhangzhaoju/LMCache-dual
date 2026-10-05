@@ -1,6 +1,11 @@
 P1 Ascend build and development install
 ========================================
 
+.. note::
+
+   Historical P1 record only. Current P6 installation and deployment use
+   :doc:`baseline_validation`. Do not restore the plugin package described below.
+
 This fork builds one ``lmcache`` distribution containing ``lmcache`` and
 ``lmcache_ascend``. Use the root entry point, not a separate Ascend plugin.
 Native build/install validation must run in the intranet candidate environment.

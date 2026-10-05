@@ -1,11 +1,14 @@
-Native repository layout and installation
-=========================================
+Native repository layout and baseline inheritance
+=================================================
 
 P5/P6 derive from immutable ``native-layout-frozen-20261005``, which removed
 the repository-root ``ascend/`` donor tree. They do not change inference algorithms, cache
 protocols or native ABI names. The supported profile remains Ascend910B3 and
 GLM-5.2 native text generation, with DSA dual groups, MTP, CPU KV storage/sharing,
 P/D, RemoteFill, checkpoint and recovery. Runtime C8 remains disabled for acceptance.
+Use :doc:`baseline_validation` for the paired installation and deployment commands.
+The frozen native-layout pair is the direct comparison and rollback target;
+the older frozen P4 pair remains an earlier recovery point.
 
 Directory ownership
 -------------------
@@ -45,21 +48,11 @@ transformers 5.2.0. No automatic dependency upgrades or build-time downloads
 are allowed. Fetching the pinned submodule through an approved proxy is an
 explicit preparation step, separate from building.
 
-Run from the LMCache checkout:
-
-.. code-block:: bash
-
-   set -euo pipefail
-   git submodule update --init -- third_party/kvcache-ops
-   python -B p1_dev.py materials --from-submodule third_party/kvcache-ops
-   python -B tools/check_native_layout.py
-   export ASCEND_HOME_PATH=/usr/local/Ascend/cann-8.5.1
-   source "$ASCEND_HOME_PATH/set_env.sh"
-   export SOC_VERSION=ascend910b3
-   python -B p1_dev.py doctor
-   LAYOUT_REPORT=$(mktemp -d /tmp/lmcache-layout.XXXXXXXX)
-   python -B p1_dev.py editable --isolated-env --output "$LAYOUT_REPORT/editable"
-   python -B p1_dev.py verify --mode editable
+Use the complete paired command sequence in :doc:`baseline_validation`,
+including CANN setup, old-install handling and per-container checks. The root
+``p1_dev.py`` materials, doctor, editable and verify interfaces are unchanged.
+Do not install only LMCache and omit vLLM. Run verify and cold imports from
+``/tmp`` or another directory outside both source checkouts.
 
 The pinned kvcache-ops commit is
 ``9f18d2339bc58a43429f7d5bdaef1628c820eff5``. An approved local submodule checkout
@@ -91,11 +84,14 @@ deferred tensor cases. Run without ``--list`` for host validation with sibling
 Full tensor/device tests remain intranet work. GitHub Actions uses the paired
 branch; private peer repositories require administrator-configured read access.
 
-Verify regular wheel installation, sdist unpack/rebuild, editable native paths
+This comparison can retain strict editable, matching the native-layout baseline.
+Formal release still requires regular wheels, sdist rebuilds and image checks;
+editable results cannot stand in for those artifacts. Verify editable native paths
 and the full 2P2D service. From outside the checkout, run the installed runtime
 probe via ``tools/p4_runtime_smoke.py --output <new-directory>``; ``--npu`` must
-be limited to an idle test device. vLLM's proxy example is now under root
-``examples/disaggregated_prefill_v1/``. Keep validated serving parameters and
+be limited to an idle test device. vLLM's proxy example is already under root
+``examples/disaggregated_prefill_v1/`` in the native-layout baseline; P6 does
+not change that path. Keep validated serving parameters and
 both TP8/DP2 and TP4/DP4 regression requirements unchanged.
 
 Only the three previously approved op-compile-tool 0.1.0 standard-library

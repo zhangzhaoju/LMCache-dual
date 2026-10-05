@@ -1,6 +1,11 @@
 P3 native Ascend integration
 ============================
 
+.. note::
+
+   Historical P3 record only. Current P6 installation and deployment use
+   :doc:`baseline_validation`, not the earlier versions or paths below.
+
 The P3 source implementation includes the complete retained P2 input
 ``cfe8a1754db743d41c8bb63f8d02ad7c3051948c``. Configuration, engine, adapter,
 NPU connector, memory, IPC and transport now have canonical LMCache owners.
