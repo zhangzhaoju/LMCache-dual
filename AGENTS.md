@@ -11,6 +11,12 @@ Do not claim qualification, switch live services, or retire original checkouts
 before evidence and recovery gates pass. No native builds on this source host.
 This supersedes earlier working-branch instructions below.
 
+Current installation/deployment instructions are in
+`docs/source/getting_started/baseline_validation.rst`. Keep the native-layout
+command interface and validated serving arguments. Paired strict editable
+remains valid for this baseline comparison; wheel/image release evidence is
+a separate requirement. Historical phase notes below are provenance only.
+
 ## Current fork: native repository layout (2026-10-04)
 
 Work on `refactor/native-layout` from immutable `p4-frozen-20261004`.
@@ -59,51 +65,39 @@ the prepared intranet environment, and P1 acceptance remains incomplete.
 
 ## Project Overview
 
-LMCache is a KV cache management engine for LLM serving that reduces Time To First Token (TTFT) and increases throughput. It stores KV caches across multiple tiers (GPU, CPU, disk, S3) and integrates with vLLM and SGLang.
+This fork provides native Ascend910B3 KV cache management for GLM-5.2 with
+vLLM, CPU KV storage/sharing, P/D, RemoteFill, checkpoint and recovery.
+SGLang, MindSpore, CUDA/HIP and the old plugin are not supported products.
 
 ## Repository
 
-The default branch is `dev`. Base all new branches and pull requests against `dev`.
+The current work branch is `p6`, inheriting `p5` and the frozen native-layout
+pair. Preserve all frozen refs. Do not follow the old upstream `dev` workflow
+for changes in this fork.
 
 ## Python Environment
 
-We recommend using [uv](https://docs.astral.sh/uv/) to manage Python environments and dependencies:
-
-```bash
-# Create and activate a virtual environment
-uv venv --python 3.12
-source .venv/bin/activate
-
-# Install dependencies
-uv pip install torch               # pre-requisite for CUDA extensions
-uv pip install -e . --no-build-isolation
-```
+Reuse the intranet Python 3.11.14/aarch64 and pinned CANN 8.5.1,
+torch 2.9.0+cpu, torch-npu 2.9.0.post2 environment. Do not install torch,
+create a Python 3.12 serving environment or build native artifacts here.
+Use available host tooling for static/host checks on this workstation.
 
 ## Build & Install
 
-```bash
-# Standard install with CUDA extensions (requires torch pre-installed)
-pip install -e . --no-build-isolation
-
-# Source-only (no CUDA extensions)
-NO_CUDA_EXT=1 pip install -e .
-
-# HIP/ROCm build
-BUILD_WITH_HIP=1 pip install -e .
-```
+Follow the baseline guide for paired materials, doctor, editable and verify
+commands in dedicated intranet containers. `p1_dev.py` is still the current
+entry point. Use its build/install commands for ordinary wheels. Reinstall
+both repositories after a phase/version change; do not switch a live editable
+checkout. CUDA/HIP and source-only installation switches are not alternatives.
 
 ## Testing
 
 ### Running Tests
 
 ```bash
-# Run standard test suite (mirrors CI)
-pytest -xvs --ignore=tests/disagg \
-  --ignore=tests/v1/test_nixl_storage.py \
-  --ignore=tests/v1/multiprocess/ \
-  --ignore=tests/v1/distributed/ \
-  --ignore=tests/skipped \
-  --ignore=tests/v1/storage_backend/test_eic.py
+# Run the explicit native-layout host subset
+python -B tools/run_layout_host_checks.py --list
+python -B tools/run_layout_host_checks.py
 
 # Run a single test file
 pytest -xvs tests/v1/test_cache_engine.py
@@ -112,7 +106,8 @@ pytest -xvs tests/v1/test_cache_engine.py
 pytest -xvs tests/v1/test_cache_engine.py::test_function_name
 ```
 
-Test dependencies: `uv pip install -r requirements/test.txt`
+Use the prepared test dependencies without implicit upgrades. Device/tensor
+tests remain intranet work; the historical full suite is not a supported-profile matrix.
 
 Pytest marker: `@pytest.mark.no_shared_allocator` disables the shared-allocator monkeypatch for a test.
 
@@ -137,7 +132,7 @@ mypy --config-file=pyproject.toml   # Type checking
 codespell --toml pyproject.toml     # Spell checking
 ```
 
-C++/CUDA files use clang-format (Google style, 80-col). Rust code in `rust/` uses `cargo fmt` and `cargo clippy`.
+C++ files use clang-format (Google style, 80-col). Rust code in `rust/` uses `cargo fmt` and `cargo clippy`.
 
 All Python files require an `# SPDX-License-Identifier: Apache-2.0` header as the first line.
 
@@ -195,19 +190,18 @@ When writing or updating documentation, follow these principles:
 Always verify that the Sphinx build passes after making documentation changes:
 
 ```bash
-# Install doc dependencies (one-time)
-pip install -r requirements/docs.txt
-
-# Build (from the docs/ directory)
-cd docs
-make clean
-make html
+# Build into a fresh temporary directory; no product imports or native build
+DOCS_OUTPUT=$(mktemp -d /tmp/lmcache-docs.XXXXXXXX)
+sphinx-build -E -W -b html docs/source "$DOCS_OUTPUT"
 ```
 
-The build must complete **without errors or warnings**. Review the generated HTML in `docs/build/html/` to confirm formatting, links, and examples render correctly. You can preview locally with:
+The build must complete **without errors or warnings**. Review the generated
+HTML in `$DOCS_OUTPUT` to confirm formatting, links, and examples render correctly.
+Use available Sphinx tooling; do not alter the serving environment to build docs.
+You can preview locally with:
 
 ```bash
-python -m http.server -d build/html/
+python -m http.server --bind 127.0.0.1 --directory "$DOCS_OUTPUT"
 ```
 
 ### Encapsulation
@@ -243,16 +237,16 @@ When reviewing code (or self-checking before submitting), verify all of the foll
 ### Testing
 - [ ] New features and bug fixes include corresponding tests.
 - [ ] Tests target the public interface and docstring contract, not implementation details.
-- [ ] Tests pass locally: `pytest -xvs` with the standard ignore flags.
+- [ ] The explicit host subset passes; pending NPU/tensor cases are reported.
 
 ### Documentation
 - [ ] New or updated documentation is concrete, concise, and includes examples.
 - [ ] Design decisions explain the _why_, not just the _what_.
 - [ ] Docs are placed in the correct subdirectory under `docs/source/` and linked from a `toctree`.
-- [ ] Sphinx build passes cleanly: `cd docs && make clean && make html` completes without errors or warnings.
+- [ ] Sphinx build with `-E -W` completes without errors or warnings in a fresh output directory.
 
 ### Safety & Performance
 - [ ] No security vulnerabilities (injection, unsafe deserialization, etc.).
 - [ ] No unnecessary memory copies or allocations in hot paths.
 - [ ] Thread safety is maintained for shared data structures.
-- [ ] CUDA/GPU resources are properly managed (allocated, freed, synchronized).
+- [ ] NPU and host cache resources are properly allocated, freed and synchronized.

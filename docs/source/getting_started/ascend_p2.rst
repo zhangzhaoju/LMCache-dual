@@ -1,6 +1,11 @@
 P2 paired vLLM integration
 ==========================
 
+.. note::
+
+   Historical P2 record only. Current P6 installation and deployment use
+   :doc:`baseline_validation`, not the earlier package pair below.
+
 For the P3 branch, see :doc:`ascend_p3`. This page describes the retained P2
 delivery, not the P3 package pair.
 
