@@ -1,4 +1,4 @@
-setuptools>=77.0.3,<81.0.0
+setuptools>=77.0.3,<85.0.0
 wheel
 cmake>=3.26.1
 ninja
