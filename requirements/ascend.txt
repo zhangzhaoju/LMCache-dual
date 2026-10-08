@@ -21,7 +21,7 @@ pyzmq >= 25.0.0
 redis
 safetensors
 setuptools>=77.0.3,<81.0.0
-setuptools_scm>=8
+setuptools_scm>=10.3.4
 sortedcontainers
 transformers==5.2.0
 uvicorn
